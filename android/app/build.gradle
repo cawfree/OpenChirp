@@ -24,4 +24,5 @@ dependencies {
     compile 'com.android.support:appcompat-v7:26.+'
     compile 'com.android.support.constraint:constraint-layout:1.0.2'
     compile group: 'com.google.zxing', name: 'core', version: '3.3.0'
+    compile files('libs/tarsos_dsp.jar')
 }

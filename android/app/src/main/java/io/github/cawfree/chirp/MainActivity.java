@@ -17,29 +17,15 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
-public class MainActivity extends AppCompatActivity {
+import be.tarsos.dsp.AudioDispatcher;
+import be.tarsos.dsp.AudioEvent;
+import be.tarsos.dsp.AudioProcessor;
+import be.tarsos.dsp.io.android.AudioDispatcherFactory;
+import be.tarsos.dsp.pitch.PitchDetectionHandler;
+import be.tarsos.dsp.pitch.PitchDetectionResult;
+import be.tarsos.dsp.pitch.PitchProcessor;
 
-    // Frequency: http://ricardo.cc/2012/12/30/Implementing-the-chirp-protocol-using-webaudio.html
-    // Code: https://books.google.co.uk/books?id=QIj9Pthp_T8C&pg=PA569&lpg=PA569&dq=reed+solomon+2%5E5&source=bl&ots=kBzfAyfry_&sig=T7AcjbdMjSNXNl1o1ETlAMfDuyg&hl=en&sa=X&ved=0ahUKEwiJu6am4M3WAhXBbRQKHQoPDIg4ChDoAQgnMAA#v=onepage&q=reed%20solomon%202%5E5&f=false
-    // Padding: https://www.cs.cmu.edu/~guyb/realworld/reedsolomon/reed_solomon_codes.html
-    // Worked Example: https://downloads.bbc.co.uk/rd/pubs/whp/whp-pdf-files/WHP031.pdf
-
-    int x = 0b00100101; // GF(2^5) array. Primitive Polynomial = D^5+D^2+1. (d37).
-
-    /** Octave Generation (sudo apt-get update, sudo apt-get install octave octave-communications):
-     *
-     >> pkg load communications
-     >> msg1 = [23 3 10 6 7 10 10 18 1 24 0 0 0 0 0 0 0 0 0 0 0 0 0];
-     >> m = 5;
-     >> n = 2^m-1;
-     >> k = 23;
-     >> msg=gf([msg1], m);
-     >> gen=rsgenpoly(n, k);
-     >> code=rsenc(msg, n, k, gen);
-     *
-     * **/
-
-    // https://projecteuclid.org/download/pdf_1/euclid.bams/1183418619 List of Galois Tables.
+public class MainActivity extends AppCompatActivity implements PitchDetectionHandler {
 
     /* Static Declarations. */
     private static final double                 SEMITONE            = 1.05946311;
@@ -49,7 +35,7 @@ public class MainActivity extends AppCompatActivity {
     private static final double[]               FREQUENCIES         = new double[MainActivity.ALPHABET.length()];
     private static final int                    LENGTH_FRAME        = 31;
     private static final int                    NUM_CORRECTION_BITS = MainActivity.LENGTH_FRAME - 23;
-    private static final int                    LENGTH_DATA         = 10;
+    private static final int                    PERIOD_MS           = 100;
 
     // Prepare the Frequencies.
     static {
@@ -63,16 +49,16 @@ public class MainActivity extends AppCompatActivity {
             MainActivity.FREQUENCIES[i] = lFrequency;
             // Buffer the Frequency.
             MainActivity.MAP_FREQUENCY.put(Character.valueOf(c), Double.valueOf(lFrequency));
-//            Log.d("chirp.io", "c: "+c+", f:"+lFrequency);
+            Log.d("chirp.io", "c "+c+", f "+lFrequency);
         }
     }
 
     /** Creates a Chirp from a ChirpBuffer. */
-    public static final String getChirp(final int[] pChirpBuffer) {
+    public static final String getChirp(final int[] pChirpBuffer, final int pChirpLength) {
         // Declare the Chirp.
         String lChirp = ""; /** TODO: To StringBuilder. */
         // Buffer the initial characters.
-        for(int i = 0; i < MainActivity.LENGTH_DATA; i++) {
+        for(int i = 0; i < pChirpLength; i++) {
             // Update the Chirp.
             lChirp += MainActivity.ALPHABET.charAt(pChirpBuffer[i]);
         }
@@ -87,12 +73,16 @@ public class MainActivity extends AppCompatActivity {
 
     /* Static Declarations. */
     private static final int AUDIO_RATE_SAMPLE_HZ = 44100;
-    private static final int DURATION_SECONDS     = 20;
+    private static final int DURATION_SECONDS     = 5;
     private static final int NUMBER_OF_SAMPLES    = MainActivity.DURATION_SECONDS * MainActivity.AUDIO_RATE_SAMPLE_HZ;
 
     /* Member Variables. */
-    private AudioTrack mAudioTrack;
-    private int[]      mChirpBuffer;
+    private AudioTrack         mAudioTrack;
+    private int[]              mChirpBuffer;
+    private ReedSolomonEncoder mReedSolomonEncoder;
+    private ReedSolomonDecoder mReedSolomonDecoder;
+    private AudioDispatcher    mAudioDispatcher;
+    private Thread             mAudioThread;
 
     @Override
     public final void onCreate(final Bundle pSavedInstanceState) {
@@ -103,162 +93,79 @@ public class MainActivity extends AppCompatActivity {
         // Allocate the AudioTrack; this is how we'll be generating continuous audio.
         this.mAudioTrack  = new AudioTrack(AudioManager.STREAM_MUSIC, MainActivity.AUDIO_RATE_SAMPLE_HZ, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT, MainActivity.NUMBER_OF_SAMPLES, AudioTrack.MODE_STREAM);
         this.mChirpBuffer = new int[MainActivity.LENGTH_FRAME];
+        this.mAudioThread = null;
+        // Declare the Galois Field. (5-bit, using root polynomial a^5 + a^2 + 1.)
+        final GenericGF          lGenericGF          = new GenericGF(0b00100101, MainActivity.LENGTH_FRAME + 1, 1);
+        // Allocate the ReedSolomonEncoder and ReedSolomonDecoder.
+        this.mReedSolomonEncoder = new ReedSolomonEncoder(lGenericGF);
+        this.mReedSolomonDecoder = new ReedSolomonDecoder(lGenericGF);
+        // Allocate the AudioDispatcher. (Note; requires dangerous permissions!)
+        this.mAudioDispatcher    = AudioDispatcherFactory.fromDefaultMicrophone(22050, 1024, 0); /** TODO: Abstract constants. */
+        // Register a PitchProcessor with the AudioDispatcher.
+        this.getAudioDispatcher().addAudioProcessor(new PitchProcessor(PitchProcessor.PitchEstimationAlgorithm.FFT_YIN, 22050, 1024, this));
     }
 
     /** Prints the equivalent information representation of a data string. */
     @SuppressWarnings("unused") public static final void indices(final String pData, final int[] pBuffer, final int pOffset) {
         // Iterate the Data.
-        for(int i = 0; i < MainActivity.LENGTH_DATA; i++) {
+        for(int i = 0; i < pData.length(); i++) {
             // Update the contents of the Array.
             pBuffer[pOffset + i] = MainActivity.ALPHABET.indexOf(Character.valueOf(pData.charAt(i)));
         }
+    }
+
+    /** Handles an update in Pitch measurement. */
+    @Override public final void handlePitch(final PitchDetectionResult pPitchDetectionResult, final AudioEvent pAudioEvent) {
+        // Print the Pitch.
+        Log.d("chirp.io", "pitch:"+pPitchDetectionResult.getPitch());
     }
 
     /** Handle resumption of the Activity. */
     @Override protected final void onResume() {
         // Implement the Parent.
         super.onResume();
-
-//        final String lMessage = "n3a67aai1o"; /** TODO: Assure exact quantity. */
-//        final String lResult  = "n3a67aai1o1miprkd8";
+        // Allocate the AudioThread.
+        this.setAudioThread(new Thread(this.getAudioDispatcher()));
+        // Start the AudioThread.
+        this.getAudioThread().start();
 
         // Declare the Message.
-        final String lMessage = "parrotbill";
+        final String lMessage = "hj05142014";//"parrotbill";
         // Print the Message as an array.
         Log.d("chirp.io", "Message: " + MainActivity.array(lMessage));
-
-
-        // Declare the Galois Field. (5-bit, using root polynomial a^5 + a^2 + 1.)
-        final GenericGF          lGenericGF          = new GenericGF(0b00100101, MainActivity.LENGTH_FRAME + 1, 1);
-        // Allocate the ReedSolomonEncoder.
-        final ReedSolomonEncoder lReedSolomonEncoder = new ReedSolomonEncoder(lGenericGF);
-        final ReedSolomonDecoder lReedSolomonDecoder = new ReedSolomonDecoder(lGenericGF);
-
-
         // Clear the ChirpBuffer.
         Arrays.fill(this.getChirpBuffer(), 0);
         // Fetch the indices of the Message.
         MainActivity.indices(lMessage, this.getChirpBuffer(), 0);
         // Encode the Bytes.
-        lReedSolomonEncoder.encode(this.getChirpBuffer(), MainActivity.NUM_CORRECTION_BITS);
+        this.getReedSolomonEncoder().encode(this.getChirpBuffer(), MainActivity.NUM_CORRECTION_BITS);
         // Print the contents of the Buffer.
         Log.d("chirp.io", "Buffer:" + MainActivity.array(this.getChirpBuffer()));
         // Return the Chirp.
-        final String lChirp = MainActivity.getChirp(this.getChirpBuffer());
+        final String lChirp = "hj050422014jikhif";//MainActivity.getChirp(this.getChirpBuffer(), lMessage.length());
         // Chirp-y. (Period is in milliseconds.)
-        this.chirp(lChirp, 100); // "hj050422014jikhif"
+        this.chirp(lChirp, MainActivity.PERIOD_MS);
 
         try {
             // Decode the Encoded Data.
-            lReedSolomonDecoder.decode(this.getChirpBuffer(), 1);
-            // Fetch the Response.
-            String lResponse = "";
-            // Iterate the ChirpBuffer.
-            for(int i = 0; i < MainActivity.LENGTH_DATA; i++) {
-                // Fetch the equivalent character.
-                lResponse += MainActivity.ALPHABET.charAt(this.getChirpBuffer()[i]);
-            }
-            // Print the decoded element.
-            Log.d("chirp.io", lResponse);
+            this.getReedSolomonDecoder().decode(this.getChirpBuffer(), (MainActivity.NUM_CORRECTION_BITS / 2));
+            //
+            Log.d("chirp.io", "after decode "+MainActivity.array(this.getChirpBuffer()));
         }
         catch(final ReedSolomonException pReedSolomonException) {
+            // Print the Stack Trace.
             pReedSolomonException.printStackTrace();
         }
+    }
 
-        // Full packet is:
-        // [17 19 0 5 0 4 2 2 0 1], [0 0 0 0 0 0 0 0 0 0 0 0 0], [4 19 18 20 17 18 15 31]
-        // [17 19 0 5 0 4 2 2 0 1    0 0 0 0 0 0 0 0 0 0 0 0 0    4 19 18 20 17 18 15 31]
-
-
-        // 17 bits... (must be missing one)
-
-        // 32-bit character alphabet
-        // n3a67aai1o                = [23 3 10 6 7 10 10 18 1 24]
-        // n3a67aai1o1miprkd8        = [23 3 10 6 7 10 10 18 1 24 1 22 18 25 27 20 13 8]
-
-        // GF(2^5) array. Primitive Polynomial = D^5+D^2+1 (decimal 37)
-
-        // Declare the Packet.
-//        final int[]              lPacket             = new int[] { 23, 3, 10, 6, 7, 10, 10, 18, 1, 24, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1, -1, -1, -1 };
-
-
-
-
-
-        // Real-Time Digital Signal Processing: Implementations and Applications, p570.
-        // https://books.google.co.uk/books?id=QIj9Pthp_T8C&pg=PA569&lpg=PA569&dq=reed+solomon+2%5E5&source=bl&ots=kBzfAyfry_&sig=T7AcjbdMjSNXNl1o1ETlAMfDuyg&hl=en&sa=X&ved=0ahUKEwiJu6am4M3WAhXBbRQKHQoPDIg4ChDoAQgnMAA#v=onepage&q=reed%20solomon%202%5E5&f=false
-        // http://ricardo.cc/2012/12/30/Implementing-the-chirp-protocol-using-webaudio.html
-        // msg1 = [23 3 10 6 7 10 10 18 1 24]
-        // m = 5 # bits per symbol
-        // n = 2^m-1 #word lengths for code
-        // k = 10 #number of information symbols (i.e. msg1.length)
-
-
-
-        // octave is awesome
-
-        // Declare th
-
-        // 10 bits, goes to 18 bits...
-
-
-        // RS(7, 3)
-//        final int n = 7; // codeword length
-//        final int k = 3; // message length
-
-        // therefore RS(18, 10) with 5-bit symbols.
-
-        // 32-bit character alphabet
-        // n3a67aai1o
-        // n3a67aai1o1miprkd8
-
-        //n = 255, k = 223, s = 8
-        //2t = 32, t = 16
-
-
-
-
-        // A popular Reed-Solomon code is RS(255,223) with 8-bit symbols.
-        // Each codeword contains 255 code word bytes, of which 223 bytes are data and 32 bytes are parity.
-
-        // Configurable:
-        //the payload size, in bits
-        //the frequency range, in hertz (including a lower and upper bound)
-        //the duration, i
-
-        //standard: our classic 50-bit, 1.8s tone in the audible range, which maps tones onto the musical scale.
-        // Standard chirps are 10 characters long, from the 5-bit alphabet 0-9a-v
-        //ultrasonic: an inaudible chirp, utilising frequencies that are beyond the limit of human hearing but can be sent and received by consumer audio devices.
-        //Ultrasonic chirps are 8 characters long, from the 4-bit hexadecimal alphabet 0-9a-f, comprising 32 bits of data in total.
-
-
-        /*
-        A popular Reed-Solomon code is RS(255,223) with 8-bit symbols. Each codeword contains 255 code word bytes, of which 223 bytes are data and 32 bytes are parity. For this code:
-        n = 255, k = 223, s = 8
-        2t = 32, t = 16
-
-
-        RS(18, 10)
-        n = 18, k = 10, s = 5
-        2t = 8, t = 2
-
-        // For example, the maximum length of a code with 8-bit symbols (s=8) is 255 bytes.
-        // therefore 31 bytes maximum
-
-        // therefore... we know we're appending 8 bits.. sending 10 = 18
-        // the data appends (31 - (8 + 10)) zeros, which are... 13. 13 zeros.
-
-        // Reed-Solomon codes may be shortened by (conceptually) making a number of data symbols zero at the encoder,
-        not transmitting them, and then re-inserting them at the decoder.
-
-
-        // [23 3 10 6 7 10 10 18 1 24 0 0 0 0 0 0 0 0 0 0 0 0 0]
-
-        */
-
-        // GF(2^5) array. Primitive Polynomial = D^5+D^2+1 (decimal 37)
-        // 100101
-
+    @Override
+    protected final void onPause() {
+        // Implement the Parent.
+        super.onPause();
+        // Stop the AudioTrack.
+        this.getAudioTrack().stop();
+        // Stop the AudioDispatcher; implicitly stops the owning Thread.
+        this.getAudioDispatcher().stop();
     }
 
     /** Produces a chirp. */
@@ -365,6 +272,26 @@ public class MainActivity extends AppCompatActivity {
 
     private final int[] getChirpBuffer() {
         return this.mChirpBuffer;
+    }
+
+    private final ReedSolomonDecoder getReedSolomonDecoder() {
+        return this.mReedSolomonDecoder;
+    }
+
+    private final ReedSolomonEncoder getReedSolomonEncoder() {
+        return this.mReedSolomonEncoder;
+    }
+
+    private AudioDispatcher getAudioDispatcher() {
+        return this.mAudioDispatcher;
+    }
+
+    private final void setAudioThread(final Thread pThread) {
+        this.mAudioThread = pThread;
+    }
+
+    private final Thread getAudioThread() {
+        return this.mAudioThread;
     }
 
 }
