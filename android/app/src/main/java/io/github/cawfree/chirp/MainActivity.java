@@ -194,8 +194,6 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
     protected final void onPause() {
         // Implement the Parent.
         super.onPause();
-        // Stop the AudioTrack.
-        this.getAudioTrack().stop();
         // Stop the AudioDispatcher; implicitly stops the owning Thread.
 //        this.getAudioDispatcher().stop();
     }
