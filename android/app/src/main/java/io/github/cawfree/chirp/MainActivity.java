@@ -43,7 +43,7 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
     private static final int                    NUM_CORRECTION_BITS          = 8;
     private static final int                    LENGTH_ENCODED               = MainActivity.LENGTH_IDENTIFIER + MainActivity.LENGTH_PAYLOAD + MainActivity.NUM_CORRECTION_BITS;
     private static final int                    LENGTH_FRAME                 = 31;
-    private static final int                    PERIOD_MS                    = 100;
+    private static final int                    PERIOD_MS                    = 120;
     private static final int                    SIZE_READ_BUFFER_PER_ELEMENT = 2;
 
     /* Sampling Declarations. */
@@ -193,16 +193,24 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
                 // Update the Result with the corresponding index value.
                 lResult[(lResult.length - NUM_CORRECTION_BITS) + i] = MainActivity.ALPHABET.indexOf(lMessage.charAt( MainActivity.LENGTH_IDENTIFIER + MainActivity.LENGTH_PAYLOAD + i));
             }
-            Log.d(TAG, "Prepared result of "+array(lResult));
+
             try {
                 // Attempt to decode the result.
                 this.getReedSolomonDecoder().decode(lResult, MainActivity.NUM_CORRECTION_BITS);
-                Log.d(TAG, "Decoded!");
+                // Reset the Message.
+                lMessage = "";
+                // Iterate the Result.
+                for(int i = 0; i < MainActivity.LENGTH_IDENTIFIER + MainActivity.LENGTH_PAYLOAD; i++) {
+                    // Buffer the decoded character.
+                    lMessage += MainActivity.ALPHABET.charAt(lResult[i]);
+                }
+                // Log the detected chirp.
+                Log.d(TAG, "Rx(" + lMessage + ")");
             }
             catch (final ReedSolomonException pReedSolomonException) {
-                Log.e(TAG, "Could not decode...");
+                // Here, we ignore undetected chirps.
                 // Print the Stack Trace.
-                pReedSolomonException.printStackTrace();
+                //pReedSolomonException.printStackTrace();
             }
 
 
@@ -210,8 +218,8 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
 
 
 
-            // Print the Message.
-            Log.d(TAG, lMessage);
+//            // Print the Message.
+//            Log.d(TAG, lMessage);
         }
     }
 
@@ -279,24 +287,22 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
 
     /** Encodes and generates a chirp Message. */
     public final void chirp(final String pMessage) {
+        // Assert that we're transmitting the Message. (Don't show error checksum codewords.)
+        Log.d(TAG, "Tx(" + pMessage + ")");
         // Declare the ChirpBuffer.
         final int[] lChirpBuffer = new int[MainActivity.LENGTH_FRAME];
         // Fetch the indices of the Message.
         MainActivity.indices(pMessage, lChirpBuffer, 0);
         // Encode the Bytes.
         MainActivity.this.getReedSolomonEncoder().encode(lChirpBuffer, MainActivity.NUM_CORRECTION_BITS);
-        // Print the contents of the Buffer.
-        Log.d(TAG, "Buffer:" + MainActivity.array(lChirpBuffer));
         // Return the Chirp.
-        final String lChirp = MainActivity.getChirp(lChirpBuffer, pMessage.length()); // "hj050422014jikhif";
+        final String lChirp = MainActivity.getChirp(lChirpBuffer, pMessage.length()); // "hj050422014jikhif"; (This will work with Chirp Share!)
         // Chirp-y. (Period is in milliseconds.)
         MainActivity.this.chirp(lChirp, MainActivity.PERIOD_MS);
     }
 
     /** Produces a chirp. */
     private final void chirp(final String pEncodedChirp, final int pPeriod) {
-        // Chirp the Data.
-        Log.d(TAG, "Chirping... " + pEncodedChirp + ", " + MainActivity.array(pEncodedChirp));
         // Declare an AsyncTask which we'll use for generating audio.
         final AsyncTask lAsyncTask = new AsyncTask<Void, Void, Void>() {
             /** Initialize the play. */
@@ -384,7 +390,7 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
         }
 
 
-        lSampleArray = lowPass(0.25, lSampleArray, new double[lSampleArray.length]);
+        lSampleArray = lowPass(0.65, lSampleArray, new double[lSampleArray.length]);
 
         // Iterate the SampleArray.
         for(final double lValue : lSampleArray) {
