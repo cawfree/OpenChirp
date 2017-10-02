@@ -355,17 +355,36 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
             // Fetch the Data.
             final Character lData      = Character.valueOf(lTransmission.charAt(i));
             // Fetch the Frequency.
-            final double    lFrequency = (double)MainActivity.MAP_CHAR_FREQUENCY.get(lData);
+            final double    lFrequency = MainActivity.MAP_CHAR_FREQUENCY.get(lData);
             // Iterate the NumberOfSamples. (Per chirp data.)
             for(int j = 0; j < lNumberOfSamples; j++) {
                 // Update the SampleArray.
-                lSampleArray[lOffset++] = Math.sin(2 * Math.PI * j / (MainActivity.AUDIO_RATE_SAMPLE_HZ / lFrequency));
+                lSampleArray[lOffset] = Math.sin(2 * Math.PI * j / (MainActivity.AUDIO_RATE_SAMPLE_HZ / lFrequency));
+                // Increase the Offset.
+                lOffset++;
             }
         }
         // Reset the Offset.
         lOffset = 0;
+        // Declare the RampWidth.
+        final int lRw = (int)(lNumberOfSamples * 0.04);
+        // Iterate between each sample.
+        for(int i = 0; i < lTransmission.length(); i++) {
+            // Fetch the Start and End Indexes of the Sample.
+            final int lIo =   i * lNumberOfSamples;
+            final int lIa = lIo + lNumberOfSamples;
+            // Iterate the Ramp.
+            for(int j = 0; j < lRw; j++) {
+                // Calculate the progression of the Ramp.
+                final double lP = j / (double)lRw;
+                // Scale the corresponding samples.
+                lSampleArray[lIo + j + 0] *= lP;
+                lSampleArray[lIa - j - 1] *= lP;
+            }
+        }
 
-//        lSampleArray = lowPass(0.15, lSampleArray, new double[lSampleArray.length]);
+
+        lSampleArray = lowPass(0.25, lSampleArray, new double[lSampleArray.length]);
 
         // Iterate the SampleArray.
         for(final double lValue : lSampleArray) {
