@@ -7,19 +7,18 @@ import android.os.AsyncTask;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.View;
 
 import com.google.zxing.common.reedsolomon.GenericGF;
 import com.google.zxing.common.reedsolomon.ReedSolomonDecoder;
 import com.google.zxing.common.reedsolomon.ReedSolomonEncoder;
 import com.google.zxing.common.reedsolomon.ReedSolomonException;
 
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
 import be.tarsos.dsp.AudioDispatcher;
 import be.tarsos.dsp.AudioEvent;
-import be.tarsos.dsp.AudioProcessor;
 import be.tarsos.dsp.io.android.AudioDispatcherFactory;
 import be.tarsos.dsp.pitch.PitchDetectionHandler;
 import be.tarsos.dsp.pitch.PitchDetectionResult;
@@ -27,15 +26,22 @@ import be.tarsos.dsp.pitch.PitchProcessor;
 
 public class MainActivity extends AppCompatActivity implements PitchDetectionHandler {
 
+    /* Logging. */
+    private static final String TAG = "chirp.io";
+
     /* Static Declarations. */
     private static final double                 SEMITONE            = 1.05946311;
     private static final double                 FREQUENCY_BASE      = 1760;
     private static final String                 ALPHABET            = "0123456789abcdefghijklmnopqrstuv";
-    private static final Map<Character, Double> MAP_FREQUENCY       = new HashMap<>();
+    private static final Map<Character, Double> MAP_CHAR_FREQUENCY = new HashMap<>();
+    private static final Map<Double, Character> MAP_FREQUENCY_CHAR = new HashMap<>();
     private static final double[]               FREQUENCIES         = new double[MainActivity.ALPHABET.length()];
     private static final int                    LENGTH_FRAME        = 31;
     private static final int                    NUM_CORRECTION_BITS = MainActivity.LENGTH_FRAME - 23;
     private static final int                    PERIOD_MS           = 100;
+
+
+
 
     // Prepare the Frequencies.
     static {
@@ -48,8 +54,9 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
             // Buffer the Frequency.
             MainActivity.FREQUENCIES[i] = lFrequency;
             // Buffer the Frequency.
-            MainActivity.MAP_FREQUENCY.put(Character.valueOf(c), Double.valueOf(lFrequency));
-            Log.d("chirp.io", "c "+c+", f "+lFrequency);
+            MainActivity.MAP_CHAR_FREQUENCY.put(Character.valueOf(c), Double.valueOf(lFrequency));
+            MainActivity.MAP_FREQUENCY_CHAR.put(Double.valueOf(lFrequency), Character.valueOf(c));
+            Log.d(TAG, "c "+c+", f "+lFrequency);
         }
     }
 
@@ -76,9 +83,10 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
     private static final int DURATION_SECONDS     = 5;
     private static final int NUMBER_OF_SAMPLES    = MainActivity.DURATION_SECONDS * MainActivity.AUDIO_RATE_SAMPLE_HZ;
 
+    // hj058042201576ikir
+
     /* Member Variables. */
     private AudioTrack         mAudioTrack;
-    private int[]              mChirpBuffer;
     private ReedSolomonEncoder mReedSolomonEncoder;
     private ReedSolomonDecoder mReedSolomonDecoder;
     private AudioDispatcher    mAudioDispatcher;
@@ -92,17 +100,32 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
         this.setContentView(R.layout.activity_main);
         // Allocate the AudioTrack; this is how we'll be generating continuous audio.
         this.mAudioTrack  = new AudioTrack(AudioManager.STREAM_MUSIC, MainActivity.AUDIO_RATE_SAMPLE_HZ, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT, MainActivity.NUMBER_OF_SAMPLES, AudioTrack.MODE_STREAM);
-        this.mChirpBuffer = new int[MainActivity.LENGTH_FRAME];
         this.mAudioThread = null;
         // Declare the Galois Field. (5-bit, using root polynomial a^5 + a^2 + 1.)
         final GenericGF          lGenericGF          = new GenericGF(0b00100101, MainActivity.LENGTH_FRAME + 1, 1);
         // Allocate the ReedSolomonEncoder and ReedSolomonDecoder.
         this.mReedSolomonEncoder = new ReedSolomonEncoder(lGenericGF);
         this.mReedSolomonDecoder = new ReedSolomonDecoder(lGenericGF);
+
+        final int lFrameSize = ((int)((MainActivity.PERIOD_MS / 1000.0f) * MainActivity.AUDIO_RATE_SAMPLE_HZ));
+
         // Allocate the AudioDispatcher. (Note; requires dangerous permissions!)
-        this.mAudioDispatcher    = AudioDispatcherFactory.fromDefaultMicrophone(22050, 1024, 0); /** TODO: Abstract constants. */
+        this.mAudioDispatcher    = AudioDispatcherFactory.fromDefaultMicrophone(MainActivity.AUDIO_RATE_SAMPLE_HZ, lFrameSize, 0); /** TODO: Abstract constants. */
         // Register a PitchProcessor with the AudioDispatcher.
-        this.getAudioDispatcher().addAudioProcessor(new PitchProcessor(PitchProcessor.PitchEstimationAlgorithm.FFT_YIN, 22050, 1024, this));
+        this.getAudioDispatcher().addAudioProcessor(new PitchProcessor(PitchProcessor.PitchEstimationAlgorithm.FFT_YIN, MainActivity.AUDIO_RATE_SAMPLE_HZ, lFrameSize, this));
+        // Register an OnTouchListener.
+        this.findViewById(R.id.rl_activity_main).setOnClickListener(new View.OnClickListener() { @Override public final void onClick(final View pView) {
+            // Declare the Message.
+            final String lMessage = "hj05042201";//"parrotbill"; //hj0632113j66khifg // hj05142014
+            // Chirp the message.
+            MainActivity.this.chirp(lMessage);
+//            try {
+//                // Decode the data, compensating for error correction.
+//                getReedSolomonDecoder().decode(dat, MainActivity.NUM_CORRECTION_BITS);
+//            } catch (ReedSolomonException e) {
+//                e.printStackTrace();
+//            }
+        } });
     }
 
     /** Prints the equivalent information representation of a data string. */
@@ -116,8 +139,32 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
 
     /** Handles an update in Pitch measurement. */
     @Override public final void handlePitch(final PitchDetectionResult pPitchDetectionResult, final AudioEvent pAudioEvent) {
-        // Print the Pitch.
-        Log.d("chirp.io", "pitch:"+pPitchDetectionResult.getPitch());
+        // Fetch the Pitch.
+        final float lPitch = pPitchDetectionResult.getPitch();
+        // Valid Pitch?
+        if(lPitch != -1 && lPitch >= MainActivity.FREQUENCY_BASE) {
+            // Declare search metrics.
+            double lDistance = Double.POSITIVE_INFINITY;
+            int    lIndex    = -1;
+            // Iterate the Frequencies.
+            for(int i = 0; i < MainActivity.FREQUENCIES.length; i++) {
+                // Fetch the Frequency.
+                final Double lFrequency = MainActivity.FREQUENCIES[i];
+                // Calculate the Delta.
+                final double lDelta     = Math.abs(lPitch - lFrequency);
+                // Is the Delta smaller than the current distance?
+                if(lDelta < lDistance) {
+                    // Overwrite the Distance.
+                    lDistance = lDelta;
+                    // Track the Index.
+                    lIndex    = i;
+                }
+            }
+            // Fetch the corresponding character.
+            final Character lCharacter = MainActivity.MAP_FREQUENCY_CHAR.get(Double.valueOf(MainActivity.FREQUENCIES[lIndex]));
+            // Print it.
+            Log.d(TAG, pPitchDetectionResult.getPitch() + " -> " + lCharacter);
+        }
     }
 
     /** Handle resumption of the Activity. */
@@ -129,33 +176,18 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
         // Start the AudioThread.
         this.getAudioThread().start();
 
-        // Declare the Message.
-        final String lMessage = "hj05142014";//"parrotbill";
-        // Print the Message as an array.
-        Log.d("chirp.io", "Message: " + MainActivity.array(lMessage));
-        // Clear the ChirpBuffer.
-        Arrays.fill(this.getChirpBuffer(), 0);
-        // Fetch the indices of the Message.
-        MainActivity.indices(lMessage, this.getChirpBuffer(), 0);
-        // Encode the Bytes.
-        this.getReedSolomonEncoder().encode(this.getChirpBuffer(), MainActivity.NUM_CORRECTION_BITS);
-        // Print the contents of the Buffer.
-        Log.d("chirp.io", "Buffer:" + MainActivity.array(this.getChirpBuffer()));
-        // Return the Chirp.
-        final String lChirp = "hj050422014jikhif";//MainActivity.getChirp(this.getChirpBuffer(), lMessage.length());
-        // Chirp-y. (Period is in milliseconds.)
-        this.chirp(lChirp, MainActivity.PERIOD_MS);
 
-        try {
-            // Decode the Encoded Data.
-            this.getReedSolomonDecoder().decode(this.getChirpBuffer(), (MainActivity.NUM_CORRECTION_BITS / 2));
-            //
-            Log.d("chirp.io", "after decode "+MainActivity.array(this.getChirpBuffer()));
-        }
-        catch(final ReedSolomonException pReedSolomonException) {
-            // Print the Stack Trace.
-            pReedSolomonException.printStackTrace();
-        }
+
+//        try {
+//            // Decode the Encoded Data.
+//            this.getReedSolomonDecoder().decode(this.getChirpBuffer(), (MainActivity.NUM_CORRECTION_BITS / 2));
+//            //
+//            Log.d(TAG, "after decode "+MainActivity.array(this.getChirpBuffer()));
+//        }
+//        catch(final ReedSolomonException pReedSolomonException) {
+//            // Print the Stack Trace.
+//            pReedSolomonException.printStackTrace();
+//        }
     }
 
     @Override
@@ -165,13 +197,29 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
         // Stop the AudioTrack.
         this.getAudioTrack().stop();
         // Stop the AudioDispatcher; implicitly stops the owning Thread.
-        this.getAudioDispatcher().stop();
+//        this.getAudioDispatcher().stop();
+    }
+
+    /** Encodes and generates a chirp Message. */
+    public final void chirp(final String pMessage) {
+        // Declare the ChirpBuffer.
+        final int[] lChirpBuffer = new int[MainActivity.LENGTH_FRAME];
+        // Fetch the indices of the Message.
+        MainActivity.indices(pMessage, lChirpBuffer, 0);
+        // Encode the Bytes.
+        MainActivity.this.getReedSolomonEncoder().encode(lChirpBuffer, MainActivity.NUM_CORRECTION_BITS);
+        // Print the contents of the Buffer.
+        Log.d(TAG, "Buffer:" + MainActivity.array(lChirpBuffer));
+        // Return the Chirp.
+        final String lChirp = MainActivity.getChirp(lChirpBuffer, pMessage.length()); // "hj050422014jikhif";
+        // Chirp-y. (Period is in milliseconds.)
+        MainActivity.this.chirp(lChirp, MainActivity.PERIOD_MS);
     }
 
     /** Produces a chirp. */
-    public final void chirp(final String pData, final int pPeriod) {
+    private final void chirp(final String pEncodedChirp, final int pPeriod) {
         // Chirp the Data.
-        Log.d("chirp.io", "Chirping... " + pData + ", " + MainActivity.array(pData));
+        Log.d(TAG, "Chirping... " + pEncodedChirp + ", " + MainActivity.array(pEncodedChirp));
         // Declare an AsyncTask which we'll use for generating audio.
         final AsyncTask lAsyncTask = new AsyncTask<Void, Void, Void>() {
             /** Initialize the play. */
@@ -182,7 +230,7 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
             /** Threaded audio generation. */
             @Override protected Void doInBackground(final Void[] pIsUnused) {
                 // Re-buffer the new tone.
-                final byte[] lChirp = MainActivity.this.onGenerateChirp(pData, pPeriod);
+                final byte[] lChirp = MainActivity.this.onGenerateChirp(pEncodedChirp, pPeriod);
                 // Write the Chirp to the Audio buffer.
                 MainActivity.this.getAudioTrack().write(lChirp, 0, lChirp.length);
                 // Satisfy the parent.
@@ -217,7 +265,7 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
             // Fetch the Data.
             final Character lData      = Character.valueOf(lTransmission.charAt(i));
             // Fetch the Frequency.
-            final double    lFrequency = (double)MainActivity.MAP_FREQUENCY.get(lData);
+            final double    lFrequency = (double)MainActivity.MAP_CHAR_FREQUENCY.get(lData);
             // Iterate the NumberOfSamples. (Per chirp data.)
             for(int j = 0; j < lNumberOfSamples; j++) {
                 // Update the SampleArray.
@@ -268,10 +316,6 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
     /* Getters. */
     private final AudioTrack getAudioTrack() {
         return this.mAudioTrack;
-    }
-
-    private final int[] getChirpBuffer() {
-        return this.mChirpBuffer;
     }
 
     private final ReedSolomonDecoder getReedSolomonDecoder() {
