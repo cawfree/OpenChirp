@@ -19,6 +19,7 @@ import java.util.Map;
 
 import be.tarsos.dsp.AudioDispatcher;
 import be.tarsos.dsp.AudioEvent;
+import be.tarsos.dsp.filters.LowPassFS;
 import be.tarsos.dsp.io.android.AudioDispatcherFactory;
 import be.tarsos.dsp.pitch.PitchDetectionHandler;
 import be.tarsos.dsp.pitch.PitchDetectionResult;
@@ -29,19 +30,26 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
     /* Logging. */
     private static final String TAG = "chirp.io";
 
-    /* Static Declarations. */
-    private static final double                 SEMITONE            = 1.05946311;
-    private static final double                 FREQUENCY_BASE      = 1760;
-    private static final String                 ALPHABET            = "0123456789abcdefghijklmnopqrstuv";
-    private static final Map<Character, Double> MAP_CHAR_FREQUENCY = new HashMap<>();
-    private static final Map<Double, Character> MAP_FREQUENCY_CHAR = new HashMap<>();
-    private static final double[]               FREQUENCIES         = new double[MainActivity.ALPHABET.length()];
-    private static final int                    LENGTH_FRAME        = 31;
-    private static final int                    NUM_CORRECTION_BITS = MainActivity.LENGTH_FRAME - 23;
-    private static final int                    PERIOD_MS           = 100;
+    /* Protocol Declarations. */
+    private static final double                 SEMITONE                     = 1.05946311;
+    private static final double                 FREQUENCY_BASE               = 1760;
+    private static final String                 ALPHABET                     = "0123456789abcdefghijklmnopqrstuv";
+    private static final Map<Character, Double> MAP_CHAR_FREQUENCY           = new HashMap<>();
+    private static final Map<Double, Character> MAP_FREQUENCY_CHAR           = new HashMap<>();
+    private static final double[]               FREQUENCIES                  = new double[MainActivity.ALPHABET.length()];
+    private static final String                 IDENTIFIER                   = "hj";
+    private static final int                    LENGTH_IDENTIFIER            = MainActivity.IDENTIFIER.length();
+    private static final int                    LENGTH_PAYLOAD               = 10;
+    private static final int                    NUM_CORRECTION_BITS          = 8;
+    private static final int                    LENGTH_ENCODED               = MainActivity.LENGTH_IDENTIFIER + MainActivity.LENGTH_PAYLOAD + MainActivity.NUM_CORRECTION_BITS;
+    private static final int                    LENGTH_FRAME                 = 31;
+    private static final int                    PERIOD_MS                    = 100;
+    private static final int                    SIZE_READ_BUFFER_PER_ELEMENT = 2;
 
-
-
+    /* Sampling Declarations. */
+    private static final int AUDIO_RATE_SAMPLE_HZ = 44100;
+    private static final int DURATION_SECONDS     = 5;
+    private static final int NUMBER_OF_SAMPLES    = MainActivity.DURATION_SECONDS * MainActivity.AUDIO_RATE_SAMPLE_HZ;
 
     // Prepare the Frequencies.
     static {
@@ -56,7 +64,7 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
             // Buffer the Frequency.
             MainActivity.MAP_CHAR_FREQUENCY.put(Character.valueOf(c), Double.valueOf(lFrequency));
             MainActivity.MAP_FREQUENCY_CHAR.put(Double.valueOf(lFrequency), Character.valueOf(c));
-            Log.d(TAG, "c "+c+", f "+lFrequency);
+//            Log.d(TAG, "c "+c+", f "+lFrequency);
         }
     }
 
@@ -78,11 +86,6 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
         return lChirp;
     }
 
-    /* Static Declarations. */
-    private static final int AUDIO_RATE_SAMPLE_HZ = 44100;
-    private static final int DURATION_SECONDS     = 5;
-    private static final int NUMBER_OF_SAMPLES    = MainActivity.DURATION_SECONDS * MainActivity.AUDIO_RATE_SAMPLE_HZ;
-
     // hj058042201576ikir
 
     /* Member Variables. */
@@ -91,6 +94,8 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
     private ReedSolomonDecoder mReedSolomonDecoder;
     private AudioDispatcher    mAudioDispatcher;
     private Thread             mAudioThread;
+    private boolean            mChirping;
+    private double[]           mPitchBuffer;
 
     @Override
     public final void onCreate(final Bundle pSavedInstanceState) {
@@ -106,25 +111,32 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
         // Allocate the ReedSolomonEncoder and ReedSolomonDecoder.
         this.mReedSolomonEncoder = new ReedSolomonEncoder(lGenericGF);
         this.mReedSolomonDecoder = new ReedSolomonDecoder(lGenericGF);
-
-        final int lFrameSize = ((int)((MainActivity.PERIOD_MS / 1000.0f) * MainActivity.AUDIO_RATE_SAMPLE_HZ));
-
+        // By default, we won't be chirping.
+        this.mChirping           = false;
+        // Allocate the SampleBuffer, compensating for the size of the read buffer for each data segment.
+        this.mPitchBuffer        = new double[MainActivity.LENGTH_ENCODED * MainActivity.SIZE_READ_BUFFER_PER_ELEMENT];
+        // Calculate the FrameSize. (In Samples.)
+        final int lFrameSize = ((int)((MainActivity.PERIOD_MS / 1000.0f) * MainActivity.AUDIO_RATE_SAMPLE_HZ)) / MainActivity.SIZE_READ_BUFFER_PER_ELEMENT;
         // Allocate the AudioDispatcher. (Note; requires dangerous permissions!)
         this.mAudioDispatcher    = AudioDispatcherFactory.fromDefaultMicrophone(MainActivity.AUDIO_RATE_SAMPLE_HZ, lFrameSize, 0); /** TODO: Abstract constants. */
         // Register a PitchProcessor with the AudioDispatcher.
-        this.getAudioDispatcher().addAudioProcessor(new PitchProcessor(PitchProcessor.PitchEstimationAlgorithm.FFT_YIN, MainActivity.AUDIO_RATE_SAMPLE_HZ, lFrameSize, this));
+        this.getAudioDispatcher().addAudioProcessor(new PitchProcessor(PitchProcessor.PitchEstimationAlgorithm.FFT_YIN, MainActivity.AUDIO_RATE_SAMPLE_HZ, (lFrameSize), this));
         // Register an OnTouchListener.
         this.findViewById(R.id.rl_activity_main).setOnClickListener(new View.OnClickListener() { @Override public final void onClick(final View pView) {
-            // Declare the Message.
-            final String lMessage = "hj05042201";//"parrotbill"; //hj0632113j66khifg // hj05142014
-            // Chirp the message.
-            MainActivity.this.chirp(lMessage);
+            // Are we not already chirping?
+            if(!MainActivity.this.isChirping()) {
+                // Declare the Message.
+                final String lMessage = "hjparrotbill";//"parrotbill"; // hj05142014
+                // hj050422014jikh with error correction 2 bit
+                // Chirp the message.
+                MainActivity.this.chirp(lMessage); //  a full message is 20 characters: 2 for det, 10 for payload, 8 for error detection
 //            try {
 //                // Decode the data, compensating for error correction.
 //                getReedSolomonDecoder().decode(dat, MainActivity.NUM_CORRECTION_BITS);
 //            } catch (ReedSolomonException e) {
 //                e.printStackTrace();
 //            }
+            }
         } });
     }
 
@@ -143,28 +155,108 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
         final float lPitch = pPitchDetectionResult.getPitch();
         // Valid Pitch?
         if(lPitch != -1 && lPitch >= MainActivity.FREQUENCY_BASE) {
-            // Declare search metrics.
-            double lDistance = Double.POSITIVE_INFINITY;
-            int    lIndex    = -1;
-            // Iterate the Frequencies.
-            for(int i = 0; i < MainActivity.FREQUENCIES.length; i++) {
-                // Fetch the Frequency.
-                final Double lFrequency = MainActivity.FREQUENCIES[i];
-                // Calculate the Delta.
-                final double lDelta     = Math.abs(lPitch - lFrequency);
-                // Is the Delta smaller than the current distance?
-                if(lDelta < lDistance) {
-                    // Overwrite the Distance.
-                    lDistance = lDelta;
-                    // Track the Index.
-                    lIndex    = i;
-                }
-            }
-            // Fetch the corresponding character.
-            final Character lCharacter = MainActivity.MAP_FREQUENCY_CHAR.get(Double.valueOf(MainActivity.FREQUENCIES[lIndex]));
-            // Print it.
-            Log.d(TAG, pPitchDetectionResult.getPitch() + " -> " + lCharacter);
+            // Update the SampleBuffer.
+            MainActivity.this.onUpdatePitchBuffer(lPitch);
+//            // Print it.
+//            Log.d(TAG, pPitchDetectionResult.getPitch() + " -> " + lCharacter);
         }
+    }
+
+    /** Updates the Sample Buffer. */
+    private final void onUpdatePitchBuffer(final double pPitch) {
+        // Shift all of the frequencies along.
+        for(int i = 0; i < this.getPitchBuffer().length - 1; i++) {
+            // Slide the values along.
+            this.getPitchBuffer()[i] = this.getPitchBuffer()[i + 1];
+        }
+        // Append the Sample to the end of the Sample Buffer.
+        this.getPitchBuffer()[this.getPitchBuffer().length - 1] = pPitch;
+        // Determine if the header has been detected.
+        /** TODO: Array-based. */
+        if(this.getCharacterAt(0).equals(MainActivity.IDENTIFIER.charAt(0)) && this.getCharacterAt(1).equals(MainActivity.IDENTIFIER.charAt(1))) {
+            // Prepare the String.
+            String lMessage = "";
+            // Iterate the Data.
+            for(int i = 0; i < MainActivity.LENGTH_ENCODED; i++) { /** TODO: Fetch indices directly instead. */
+                // Append the read characters.
+                lMessage += this.getCharacterAt(i);
+            }
+            // Declare the ResultBuffer.
+            final int[] lResult = new int[MainActivity.LENGTH_FRAME];
+            // Iterate the data-style characters.
+            for(int i = 0; i < MainActivity.LENGTH_IDENTIFIER + MainActivity.LENGTH_PAYLOAD; i++) {
+                // Update the Result with the corresponding index value.
+                lResult[i] = MainActivity.ALPHABET.indexOf(lMessage.charAt(i));
+            }
+            // Iterate the error correction characters.
+            for(int i = 0; i < MainActivity.NUM_CORRECTION_BITS; i++) {
+                // Update the Result with the corresponding index value.
+                lResult[(lResult.length - NUM_CORRECTION_BITS) + i] = MainActivity.ALPHABET.indexOf(lMessage.charAt( MainActivity.LENGTH_IDENTIFIER + MainActivity.LENGTH_PAYLOAD + i));
+            }
+            Log.d(TAG, "Prepared result of "+array(lResult));
+            try {
+                // Attempt to decode the result.
+                this.getReedSolomonDecoder().decode(lResult, MainActivity.NUM_CORRECTION_BITS);
+                Log.d(TAG, "Decoded!");
+            }
+            catch (final ReedSolomonException pReedSolomonException) {
+                Log.e(TAG, "Could not decode...");
+                // Print the Stack Trace.
+                pReedSolomonException.printStackTrace();
+            }
+
+
+            // Next, decode the String.
+
+
+
+            // Print the Message.
+            Log.d(TAG, lMessage);
+        }
+    }
+
+    /** Returns the character at a normalized index. (Compensates for the fact that the PitchBuffer is a multiple of samples per index.) */
+    private final Character getCharacterAt(final int pIndex) {
+        // Fetch the Frequencies.
+        final double    lFo = this.getPitchBuffer()[(pIndex * MainActivity.SIZE_READ_BUFFER_PER_ELEMENT) + 0];
+        final double    lFa = this.getPitchBuffer()[(pIndex * MainActivity.SIZE_READ_BUFFER_PER_ELEMENT) + 1];
+        // Fetch the Characters.
+        final Character lCo = this.getCharacterFor(lFo);
+        final Character lCa = this.getCharacterFor(lFa);
+        // Are they equal?
+        if(lCo == lCa) {
+            // Return the Character.
+            return lCo;
+        }
+        else {
+            // Return the character for the average frequency.
+            return this.getCharacterFor((lFo + lFa) / 2.0);
+        }
+    }
+
+    /** Returns the Character corresponding to a Frequency. */
+    private final Character getCharacterFor(final double pPitch) {
+        // Declare search metrics.
+        double lDistance = Double.POSITIVE_INFINITY;
+        int    lIndex    = -1;
+        // Iterate the Frequencies.
+        for(int i = 0; i < MainActivity.FREQUENCIES.length; i++) {
+            // Fetch the Frequency.
+            final Double lFrequency = MainActivity.FREQUENCIES[i];
+            // Calculate the Delta.
+            final double lDelta     = Math.abs(pPitch - lFrequency);
+            // Is the Delta smaller than the current distance?
+            if(lDelta < lDistance) {
+                // Overwrite the Distance.
+                lDistance = lDelta;
+                // Track the Index.
+                lIndex    = i;
+            }
+        }
+        // Fetch the corresponding character.
+        final Character lCharacter = MainActivity.MAP_FREQUENCY_CHAR.get(Double.valueOf(MainActivity.FREQUENCIES[lIndex]));
+        // Return the Character.
+        return lCharacter;
     }
 
     /** Handle resumption of the Activity. */
@@ -175,19 +267,6 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
         this.setAudioThread(new Thread(this.getAudioDispatcher()));
         // Start the AudioThread.
         this.getAudioThread().start();
-
-
-
-//        try {
-//            // Decode the Encoded Data.
-//            this.getReedSolomonDecoder().decode(this.getChirpBuffer(), (MainActivity.NUM_CORRECTION_BITS / 2));
-//            //
-//            Log.d(TAG, "after decode "+MainActivity.array(this.getChirpBuffer()));
-//        }
-//        catch(final ReedSolomonException pReedSolomonException) {
-//            // Print the Stack Trace.
-//            pReedSolomonException.printStackTrace();
-//        }
     }
 
     @Override
@@ -222,6 +301,8 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
         final AsyncTask lAsyncTask = new AsyncTask<Void, Void, Void>() {
             /** Initialize the play. */
             @Override protected final void onPreExecute() {
+                // Assert that we're chirping.
+                MainActivity.this.setChirping(true);
                 // Play the AudioTrack.
                 MainActivity.this.getAudioTrack().play();
             }
@@ -238,10 +319,21 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
             @Override protected final void onPostExecute(Void pIsUnused) {
                 // Stop the AudioTrack.
                 MainActivity.this.getAudioTrack().stop();
+                // Assert that we're no longer chirping.
+                MainActivity.this.setChirping(false);
             }
         };
         // Execute the AsyncTask on the pre-prepared ThreadPool.
         lAsyncTask.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, null);
+    }
+
+    protected double[] lowPass(double ALPHA, double[] input, double[] output ) {
+        if ( output == null ) return input;
+
+        for ( int i=0; i<input.length; i++ ) {
+            output[i] = output[i] + ALPHA * (input[i] - output[i]);
+        }
+        return output;
     }
 
     /** Generates a tone for the audio stream. */
@@ -253,7 +345,7 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
         // Calculate the Number of Samples per chirp.
         final int      lNumberOfSamples = (int)(MainActivity.AUDIO_RATE_SAMPLE_HZ * (pPeriod / 1000.0f));
         // Declare the SampleArray.
-        final double[] lSampleArray     = new double[lTransmission.length() * lNumberOfSamples];
+              double[] lSampleArray     = new double[lTransmission.length() * lNumberOfSamples];
         // Declare the Generation.
         final byte[]   lGeneration      = new byte[lSampleArray.length * 2];
         // Declare the Offset.
@@ -272,6 +364,9 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
         }
         // Reset the Offset.
         lOffset = 0;
+
+//        lSampleArray = lowPass(0.15, lSampleArray, new double[lSampleArray.length]);
+
         // Iterate the SampleArray.
         for(final double lValue : lSampleArray) {
             // Assume normalized, so scale to the maximum amplitude.
@@ -334,6 +429,18 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
 
     private final Thread getAudioThread() {
         return this.mAudioThread;
+    }
+
+    private final void setChirping(final boolean pIsChirping) {
+        this.mChirping = pIsChirping;
+    }
+
+    private final boolean isChirping() {
+        return this.mChirping;
+    }
+
+    private final double[] getPitchBuffer() {
+        return this.mPitchBuffer;
     }
 
 }
