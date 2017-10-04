@@ -19,7 +19,6 @@ import java.util.Map;
 
 import be.tarsos.dsp.AudioDispatcher;
 import be.tarsos.dsp.AudioEvent;
-import be.tarsos.dsp.filters.LowPassFS;
 import be.tarsos.dsp.io.android.AudioDispatcherFactory;
 import be.tarsos.dsp.pitch.PitchDetectionHandler;
 import be.tarsos.dsp.pitch.PitchDetectionResult;
@@ -47,9 +46,15 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
     private static final int                    SIZE_READ_BUFFER_PER_ELEMENT = 2;
 
     /* Sampling Declarations. */
-    private static final int AUDIO_RATE_SAMPLE_HZ = 44100;
-    private static final int DURATION_SECONDS     = 5;
-    private static final int NUMBER_OF_SAMPLES    = MainActivity.DURATION_SECONDS * MainActivity.AUDIO_RATE_SAMPLE_HZ;
+    private static final int WRITE_AUDIO_RATE_SAMPLE_HZ = 44100;
+    private static final int WRITE_NUMBER_OF_SAMPLES    = (int)(MainActivity.LENGTH_ENCODED * (MainActivity.PERIOD_MS / 1000.0f) * MainActivity.WRITE_AUDIO_RATE_SAMPLE_HZ) * SIZE_READ_BUFFER_PER_ELEMENT;
+
+    private static final int READ_SAMPLES_PER_PERIOD = 3;
+    private static final int READ_SAMPLE_RATE        = ((int)(MainActivity.FREQUENCIES[MainActivity.FREQUENCIES.length - 1] * 2)) * MainActivity.READ_SAMPLES_PER_PERIOD;
+    private static final int READ_BUFFER_SIZE        = ((int)(((MainActivity.PERIOD_MS / 1000.0) * MainActivity.READ_SAMPLE_RATE) * READ_SAMPLES_PER_PERIOD));
+
+    // we aim to make three samples per period
+
 
     // Prepare the Frequencies.
     static {
@@ -104,7 +109,7 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
         // Define the ContentView.
         this.setContentView(R.layout.activity_main);
         // Allocate the AudioTrack; this is how we'll be generating continuous audio.
-        this.mAudioTrack  = new AudioTrack(AudioManager.STREAM_MUSIC, MainActivity.AUDIO_RATE_SAMPLE_HZ, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT, MainActivity.NUMBER_OF_SAMPLES, AudioTrack.MODE_STREAM);
+        this.mAudioTrack  = new AudioTrack(AudioManager.STREAM_MUSIC, MainActivity.WRITE_AUDIO_RATE_SAMPLE_HZ, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT, MainActivity.WRITE_NUMBER_OF_SAMPLES, AudioTrack.MODE_STREAM);
         this.mAudioThread = null;
         // Declare the Galois Field. (5-bit, using root polynomial a^5 + a^2 + 1.)
         final GenericGF          lGenericGF          = new GenericGF(0b00100101, MainActivity.LENGTH_FRAME + 1, 1);
@@ -116,11 +121,11 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
         // Allocate the SampleBuffer, compensating for the size of the read buffer for each data segment.
         this.mPitchBuffer        = new double[MainActivity.LENGTH_ENCODED * MainActivity.SIZE_READ_BUFFER_PER_ELEMENT];
         // Calculate the FrameSize. (In Samples.)
-        final int lFrameSize = ((int)((MainActivity.PERIOD_MS / 1000.0f) * MainActivity.AUDIO_RATE_SAMPLE_HZ)) / MainActivity.SIZE_READ_BUFFER_PER_ELEMENT;
+        final int lFrameSize = ((int)((MainActivity.PERIOD_MS / 1000.0f) * MainActivity.WRITE_AUDIO_RATE_SAMPLE_HZ)) / MainActivity.SIZE_READ_BUFFER_PER_ELEMENT;
         // Allocate the AudioDispatcher. (Note; requires dangerous permissions!)
-        this.mAudioDispatcher    = AudioDispatcherFactory.fromDefaultMicrophone(MainActivity.AUDIO_RATE_SAMPLE_HZ, lFrameSize, 0); /** TODO: Abstract constants. */
+        this.mAudioDispatcher    = AudioDispatcherFactory.fromDefaultMicrophone(MainActivity.WRITE_AUDIO_RATE_SAMPLE_HZ, lFrameSize, 0); /** TODO: Abstract constants. */
         // Register a PitchProcessor with the AudioDispatcher.
-        this.getAudioDispatcher().addAudioProcessor(new PitchProcessor(PitchProcessor.PitchEstimationAlgorithm.FFT_YIN, MainActivity.AUDIO_RATE_SAMPLE_HZ, (lFrameSize), this));
+        this.getAudioDispatcher().addAudioProcessor(new PitchProcessor(PitchProcessor.PitchEstimationAlgorithm.FFT_YIN, MainActivity.WRITE_AUDIO_RATE_SAMPLE_HZ, (lFrameSize), this));
         // Register an OnTouchListener.
         this.findViewById(R.id.rl_activity_main).setOnClickListener(new View.OnClickListener() { @Override public final void onClick(final View pView) {
             // Are we not already chirping?
@@ -349,7 +354,7 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
         // Declare the Transmission String.
         final String   lTransmission        = pData + lErrorCorrection;
         // Calculate the Number of Samples per chirp.
-        final int      lNumberOfSamples = (int)(MainActivity.AUDIO_RATE_SAMPLE_HZ * (pPeriod / 1000.0f));
+        final int      lNumberOfSamples = (int)(MainActivity.WRITE_AUDIO_RATE_SAMPLE_HZ * (pPeriod / 1000.0f));
         // Declare the SampleArray.
               double[] lSampleArray     = new double[lTransmission.length() * lNumberOfSamples];
         // Declare the Generation.
@@ -365,7 +370,7 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
             // Iterate the NumberOfSamples. (Per chirp data.)
             for(int j = 0; j < lNumberOfSamples; j++) {
                 // Update the SampleArray.
-                lSampleArray[lOffset] = Math.sin(2 * Math.PI * j / (MainActivity.AUDIO_RATE_SAMPLE_HZ / lFrequency));
+                lSampleArray[lOffset] = Math.sin(2 * Math.PI * j / (MainActivity.WRITE_AUDIO_RATE_SAMPLE_HZ / lFrequency));
                 // Increase the Offset.
                 lOffset++;
             }
