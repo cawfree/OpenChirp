@@ -30,48 +30,18 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
     /* Logging. */
     private static final String TAG = "chirp.io";
 
-    /* Protocol Declarations. */
-//    private static final double                 SEMITONE                     = 1.05946311;
-//    private static final double                 FREQUENCY_BASE               = 1760;
-//    private static final String                 ALPHABET                     = "0123456789abcdefghijklmnopqrstuv";
-//    private static final Map<Character, Double> MAP_CHAR_FREQUENCY           = new HashMap<>();
-//    private static final Map<Double, Character> MAP_FREQUENCY_CHAR           = new HashMap<>();
-//    private static final double[]               FREQUENCIES                  = new double[MainActivity.ALPHABET.length()];
-
     /** TODO: As customizable. */
+
+    // 120, filter 0.65
+
     private static final ChirpFactory           FACTORY_CHIRP                = new ChirpFactory.Builder().setSymbolPeriodMs(120).build();
-//    private static final String                 IDENTIFIER                   = "hj";
-//    private static final int                    LENGTH_IDENTIFIER            = MainActivity.IDENTIFIER.length();
-//    private static final int                    LENGTH_PAYLOAD               = 10;
-//    private static final int                    NUM_CORRECTION_BITS          = 8;
-//    private static final int                    LENGTH_ENCODED               = FACTORY_CHIRP.getIdentifier().length() + FACTORY_CHIRP.getPayloadLength() + FACTORY_CHIRP.getErrorLength();
-//    private static final int                    LENGTH_FRAME                 = 31;
-//    private static final int                    PERIOD_MS                    = 120;
     private static final int                    SIZE_READ_BUFFER_PER_ELEMENT = 2;
 
     /* Sampling Declarations. */
     private static final int WRITE_AUDIO_RATE_SAMPLE_HZ = 44100;
     private static final int WRITE_NUMBER_OF_SAMPLES    = (int)(MainActivity.FACTORY_CHIRP.getEncodedLength() * (MainActivity.FACTORY_CHIRP.getSymbolPeriodMs() / 1000.0f) * MainActivity.WRITE_AUDIO_RATE_SAMPLE_HZ) * SIZE_READ_BUFFER_PER_ELEMENT;
 
-    // we aim to make three samples per period
-
-
-//    // Prepare the Frequencies.
-//    static {
-//        // Generate the frequencies that correspond to each code point.
-//        for(int i = 0; i < MainActivity.ALPHABET.length(); i++) {
-//            // Fetch the Character.
-//            final char   c              = MainActivity.ALPHABET.charAt(i);
-//            // Calculate the Frequency.
-//            final double lFrequency     = MainActivity.FREQUENCY_BASE * Math.pow(MainActivity.SEMITONE, i); /** TODO: to fixed? */
-//            // Buffer the Frequency.
-//            MainActivity.FREQUENCIES[i] = lFrequency;
-//            // Buffer the Frequency.
-//            MainActivity.MAP_CHAR_FREQUENCY.put(Character.valueOf(c), Double.valueOf(lFrequency));
-//            MainActivity.MAP_FREQUENCY_CHAR.put(Double.valueOf(lFrequency), Character.valueOf(c));
-////            Log.d(TAG, "c "+c+", f "+lFrequency);
-//        }
-//    }
+    // we aim to make N samples per period
 
     /** Creates a ChirpFactory from a ChirpBuffer. */
     public static final String getChirp(final int[] pChirpBuffer, final int pChirpLength) {
@@ -100,8 +70,10 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
     private AudioDispatcher    mAudioDispatcher;
     private Thread             mAudioThread;
     private boolean            mChirping;
-    private double[]           mPitchBuffer;
+    private double[]           mPitchBuffer; /** TODO: Array of timestamps too, which verify whether the pitches are recent too */
     private boolean            mSampleSelf;
+
+    /** TODO: How to know the transmission medium is free? */
 
     @Override
     public final void onCreate(final Bundle pSavedInstanceState) {
@@ -132,12 +104,12 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
         // Register an OnTouchListener.
         this.findViewById(R.id.rl_activity_main).setOnClickListener(new View.OnClickListener() { @Override public final void onClick(final View pView) {
             // Are we not already chirping?
-            if(!MainActivity.this.isChirping()) {
+//            if(!MainActivity.this.isChirping()) {
                 // Declare the Message.
-                final String lMessage = "datadatada";//"parrotbill"; // hj05142014
+                final String lMessage = "datadatada";//"datadatada";//"parrotbill"; // hj05142014
                 // ChirpFactory the message.
                 MainActivity.this.chirp(lMessage);
-            }
+//            }
         } });
     }
 
@@ -158,7 +130,11 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
     /** Handles an update in Pitch measurement. */
     @Override public final void handlePitch(final PitchDetectionResult pPitchDetectionResult, final AudioEvent pAudioEvent) {
         // Fetch the Pitch.
-        final float lPitch = pPitchDetectionResult.getPitch();
+        final float   lPitch        = pPitchDetectionResult.getPitch();
+        // Fetch the Time.
+        final long    lTime         = System.currentTimeMillis();
+        // Is it a valid chirp?
+        final boolean lIsValidChirp = lPitch != -1 && lPitch >= FACTORY_CHIRP.getBaseFrequency(); /** TODO: Time might be an appropriate factor. */
         // Are we currently chirping?
         if(this.isChirping()) {
             // Are we not allowed to sample ourself?
@@ -168,16 +144,14 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
             }
         }
         // Valid Pitch?
-        if(lPitch != -1 && lPitch >= FACTORY_CHIRP.getBaseFrequency()) {
+        if(lIsValidChirp) {
             // Update the SampleBuffer.
-            MainActivity.this.onUpdatePitchBuffer(lPitch);
-//            // Print it.
-//            Log.d(TAG, pPitchDetectionResult.getPitch() + " -> " + lCharacter);
+            MainActivity.this.onUpdatePitchBuffer(lPitch, lTime);
         }
     }
 
     /** Updates the Sample Buffer. */
-    private final void onUpdatePitchBuffer(final double pPitch) {
+    private final void onUpdatePitchBuffer(final double pPitch, final long pCurrentTimeMillis) {
         // Shift all of the frequencies along.
         for(int i = 0; i < this.getPitchBuffer().length - 1; i++) {
             // Slide the values along.
@@ -250,8 +224,8 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
             return lCo;
         }
         else {
-            // Return the character for the average frequency.
-            return this.getCharacterFor((lFo + lFa) / 2.0);
+            // Return the character for the average frequency. (Use a geometric mean.)
+            return this.getCharacterFor(Math.sqrt(lFo * lFa));
         }
     }
 
@@ -304,9 +278,7 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
         if(pMessage.length() != FACTORY_CHIRP.getPayloadLength()) {
             // Assert that we can't generate the chirp; they need to match the Payload.
             throw new UnsupportedOperationException("Invalid message size (" + pMessage.length() + ")! Expected " + FACTORY_CHIRP.getPayloadLength() + " symbols.");
-        }
-        // Ensure all of the characters are contained.
-        {
+        } {
             // Declare the search metric.
             boolean lIsSupported = true;
             // Iterate through the Message.
@@ -404,7 +376,7 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
             final int lIo =   i * lNumberOfSamples;
             final int lIa = lIo + lNumberOfSamples;
             // Declare the RampWidth. We'll change it between iterations for more tuneful sound.)
-            final int lRw = (int)(lNumberOfSamples * 0.2 * Math.random());
+            final int lRw = (int)(lNumberOfSamples * (0.15 + (0.15 * Math.random())));
             // Iterate the Ramp.
             for(int j = 0; j < lRw; j++) {
                 // Calculate the progression of the Ramp.
