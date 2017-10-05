@@ -49,10 +49,6 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
     private static final int WRITE_AUDIO_RATE_SAMPLE_HZ = 44100;
     private static final int WRITE_NUMBER_OF_SAMPLES    = (int)(MainActivity.LENGTH_ENCODED * (MainActivity.PERIOD_MS / 1000.0f) * MainActivity.WRITE_AUDIO_RATE_SAMPLE_HZ) * SIZE_READ_BUFFER_PER_ELEMENT;
 
-    private static final int READ_SAMPLES_PER_PERIOD = 3;
-    private static final int READ_SAMPLE_RATE        = ((int)(MainActivity.FREQUENCIES[MainActivity.FREQUENCIES.length - 1] * 2)) * MainActivity.READ_SAMPLES_PER_PERIOD;
-    private static final int READ_BUFFER_SIZE        = ((int)(((MainActivity.PERIOD_MS / 1000.0) * MainActivity.READ_SAMPLE_RATE) * READ_SAMPLES_PER_PERIOD));
-
     // we aim to make three samples per period
 
 
@@ -338,15 +334,6 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
         lAsyncTask.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, null);
     }
 
-    protected double[] lowPass(double ALPHA, double[] input, double[] output ) {
-        if ( output == null ) return input;
-
-        for ( int i=0; i<input.length; i++ ) {
-            output[i] = output[i] + ALPHA * (input[i] - output[i]);
-        }
-        return output;
-    }
-
     /** Generates a tone for the audio stream. */
     private final byte[] onGenerateChirp(final String pData, final int pPeriod) {
         // Define the ErrorCorrection.
@@ -394,16 +381,23 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
             }
         }
 
-
-        lSampleArray = lowPass(0.65, lSampleArray, new double[lSampleArray.length]);
+        // Declare the filtering constant.
+        final double lAlpha    = 0.6;
+              double lPrevious = 0;
 
         // Iterate the SampleArray.
-        for(final double lValue : lSampleArray) {
+        for(int i = 0; i < lSampleArray.length; i++) {
+            // Fetch the Value.
+            final double lValue    = lSampleArray[i];
+            // Filter the Value.
+            final double lFiltered = (lAlpha < 1.0) ? ((lValue - lPrevious) * lAlpha) : lValue;
             // Assume normalized, so scale to the maximum amplitude.
-            final short lPCM = (short) ((lValue * 32767));
+            final short lPCM = (short) ((lFiltered * 32767));
             // Supply the Generation with 16-bit PCM. (The first byte is the low-order byte.)
             lGeneration[lOffset++] = (byte) (lPCM & 0x00FF);
             lGeneration[lOffset++] = (byte)((lPCM & 0xFF00) >>> 8);
+            // Overwrite the Previous with the Filtered value.
+            lPrevious = lFiltered;
         }
         // Return the Generation.
         return lGeneration;
