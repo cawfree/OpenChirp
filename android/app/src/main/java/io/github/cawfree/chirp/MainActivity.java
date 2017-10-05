@@ -134,16 +134,9 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
             // Are we not already chirping?
             if(!MainActivity.this.isChirping()) {
                 // Declare the Message.
-                final String lMessage = "parrotbill";//"parrotbill"; // hj05142014
-                // hj050422014jikh with error correction 2 bit
+                final String lMessage = "datadatada";//"parrotbill"; // hj05142014
                 // ChirpFactory the message.
-                MainActivity.this.chirp(lMessage); //  a full message is 20 characters: 2 for det, 10 for payload, 8 for error detection
-//            try {
-//                // Decode the data, compensating for error correction.
-//                getReedSolomonDecoder().decode(dat, MainActivity.NUM_CORRECTION_BITS);
-//            } catch (ReedSolomonException e) {
-//                e.printStackTrace();
-//            }
+                MainActivity.this.chirp(lMessage);
             }
         } });
     }
@@ -306,11 +299,26 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
     }
 
     /** Encodes and generates a chirp Message. */
-    public final void chirp(String pMessage) {
+    public final void chirp(String pMessage) throws UnsupportedOperationException {
         // Is the message the correct length?
         if(pMessage.length() != FACTORY_CHIRP.getPayloadLength()) {
             // Assert that we can't generate the chirp; they need to match the Payload.
             throw new UnsupportedOperationException("Invalid message size (" + pMessage.length() + ")! Expected " + FACTORY_CHIRP.getPayloadLength() + " symbols.");
+        }
+        // Ensure all of the characters are contained.
+        {
+            // Declare the search metric.
+            boolean lIsSupported = true;
+            // Iterate through the Message.
+            for(final char c : pMessage.toCharArray()) {
+                // Update the search metric.
+                lIsSupported &= FACTORY_CHIRP.getRange().getCharacters().indexOf(c) != -1;
+            }
+            // Is the message not supported?
+            if(!lIsSupported) {
+                // Inform the user.
+                throw new UnsupportedOperationException("Message \"" + pMessage + "\" contains illegal characters.");
+            }
         }
         // Append the Header.
         pMessage = FACTORY_CHIRP.getIdentifier().concat(pMessage);
@@ -390,13 +398,13 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
         }
         // Reset the Offset.
         lOffset = 0;
-        // Declare the RampWidth.
-        final int lRw = (int)(lNumberOfSamples * 0.04);
         // Iterate between each sample.
         for(int i = 0; i < lTransmission.length(); i++) {
             // Fetch the Start and End Indexes of the Sample.
             final int lIo =   i * lNumberOfSamples;
             final int lIa = lIo + lNumberOfSamples;
+            // Declare the RampWidth. We'll change it between iterations for more tuneful sound.)
+            final int lRw = (int)(lNumberOfSamples * 0.2 * Math.random());
             // Iterate the Ramp.
             for(int j = 0; j < lRw; j++) {
                 // Calculate the progression of the Ramp.
