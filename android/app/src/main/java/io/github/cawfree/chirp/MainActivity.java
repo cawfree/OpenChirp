@@ -15,11 +15,14 @@ import com.google.zxing.common.reedsolomon.ReedSolomonDecoder;
 import com.google.zxing.common.reedsolomon.ReedSolomonEncoder;
 import com.google.zxing.common.reedsolomon.ReedSolomonException;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
 import be.tarsos.dsp.AudioDispatcher;
 import be.tarsos.dsp.AudioEvent;
+import be.tarsos.dsp.AudioProcessor;
+import be.tarsos.dsp.io.TarsosDSPAudioFormat;
 import be.tarsos.dsp.io.android.AudioDispatcherFactory;
 import be.tarsos.dsp.pitch.PitchDetectionHandler;
 import be.tarsos.dsp.pitch.PitchDetectionResult;
@@ -99,6 +102,63 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
         final int lFrameSize = ((int)((MainActivity.FACTORY_CHIRP.getSymbolPeriodMs() / 1000.0f) * MainActivity.WRITE_AUDIO_RATE_SAMPLE_HZ)) / MainActivity.SIZE_READ_BUFFER_PER_ELEMENT;
         // Allocate the AudioDispatcher. (Note; requires dangerous permissions!)
         this.mAudioDispatcher    = AudioDispatcherFactory.fromDefaultMicrophone(MainActivity.WRITE_AUDIO_RATE_SAMPLE_HZ, lFrameSize, 0); /** TODO: Abstract constants. */
+        // Declare the SubFactor.
+        final int lSubFactor = 4;
+        // Define a Custom AudioProcessor.
+        this.getAudioDispatcher().addAudioProcessor(new AudioProcessor() {
+            /* Member Variables. */
+            private final PitchProcessor mPitchProcessor = new PitchProcessor(PitchProcessor.PitchEstimationAlgorithm.FFT_YIN, MainActivity.WRITE_AUDIO_RATE_SAMPLE_HZ, (lFrameSize / lSubFactor), new PitchDetectionHandler() { @Override public final void handlePitch(final PitchDetectionResult pPitchDetectionResult, final AudioEvent pAudioEvent) {
+                // Fetch the Pitch.
+                final double lPitch = pPitchDetectionResult.getPitch();
+                // Valid pitch?
+                if(lPitch != -1 && lPitch > MainActivity.FACTORY_CHIRP.getBaseFrequency()) { /** TODO: Define a tolerance. */
+                    Log.d(TAG, lPitch+" "+MainActivity.this.getCharacterFor(lPitch));
+                }
+            } });
+            /** When processing audio... */
+            @Override public final boolean process(final AudioEvent pAudioEvent) {
+                // Declare the TarsosDSPFormat; essentially make a safe copy of the existing setup.
+                final TarsosDSPAudioFormat lTarsosDSPAudioFormat = new TarsosDSPAudioFormat(
+                    getAudioDispatcher().getFormat().getEncoding(),
+                    getAudioDispatcher().getFormat().getSampleRate(),
+                    getAudioDispatcher().getFormat().getSampleSizeInBits() / lSubFactor,
+                    getAudioDispatcher().getFormat().getChannels(),
+                    getAudioDispatcher().getFormat().getFrameSize() / lSubFactor,
+                    getAudioDispatcher().getFormat().getFrameRate(),
+                    getAudioDispatcher().getFormat().isBigEndian(),
+                    getAudioDispatcher().getFormat().properties()
+                );
+                // Fetch the Floats.
+                final float[]    lFloats     = pAudioEvent.getFloatBuffer();
+                // Calculate the FrameSize.
+                final int        lFrameSize  = (lFloats.length / lSubFactor);
+                // Iterate across the Floats.
+                for(int i = 0; i < (lFloats.length - lFrameSize); i += lFrameSize) {
+                    // Segment the buffer.
+                    final float[] lSegment = Arrays.copyOfRange(lFloats, i, i + lFrameSize);
+                    // Allocate an AudioEvent.
+                    final AudioEvent lAudioEvent = new AudioEvent(lTarsosDSPAudioFormat);
+                    // Assign the Segment.
+                    lAudioEvent.setFloatBuffer(lSegment);
+                    // Export the AudioEvent to the PitchProessor.
+                    this.getPitchProcessor().process(lAudioEvent);
+                }
+                // Assert that the event was handled.
+                return true;
+            }
+            /** Once Processing is Finished... */
+            @Override public final void processingFinished() {
+                // Export the event to the PitchProcessor.
+            }
+            /* Getters. */
+            private final PitchProcessor getPitchProcessor() {
+                return this.mPitchProcessor;
+            }
+        });
+
+
+
+
         // Register a PitchProcessor with the AudioDispatcher.
         this.getAudioDispatcher().addAudioProcessor(new PitchProcessor(PitchProcessor.PitchEstimationAlgorithm.FFT_YIN, MainActivity.WRITE_AUDIO_RATE_SAMPLE_HZ, (lFrameSize), this));
         // Register an OnTouchListener.
@@ -269,7 +329,7 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
         // Implement the Parent.
         super.onPause();
         // Stop the AudioDispatcher; implicitly stops the owning Thread.
-//        this.getAudioDispatcher().stop();
+        this.getAudioDispatcher().stop();
     }
 
     /** Encodes and generates a chirp Message. */
@@ -342,22 +402,18 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
 
     /** Generates a tone for the audio stream. */
     private final byte[] onGenerateChirp(final String pData, final int pPeriod) {
-        // Define the ErrorCorrection.
-        final String   lErrorCorrection     = "";
-        // Declare the Transmission String.
-        final String   lTransmission        = pData + lErrorCorrection;
         // Calculate the Number of Samples per chirp.
         final int      lNumberOfSamples = (int)(MainActivity.WRITE_AUDIO_RATE_SAMPLE_HZ * (pPeriod / 1000.0f));
         // Declare the SampleArray.
-              double[] lSampleArray     = new double[lTransmission.length() * lNumberOfSamples];
+              double[] lSampleArray     = new double[pData.length() * lNumberOfSamples];
         // Declare the Generation.
         final byte[]   lGeneration      = new byte[lSampleArray.length * 2];
         // Declare the Offset.
         int      lOffset          = 0;
         // Iterate the Transmission.
-        for(int i = 0; i < lTransmission.length(); i++) {
+        for(int i = 0; i < pData.length(); i++) {
             // Fetch the Data.
-            final Character lData      = Character.valueOf(lTransmission.charAt(i));
+            final Character lData      = Character.valueOf(pData.charAt(i));
             // Fetch the Frequency.
             final double    lFrequency = FACTORY_CHIRP.getMapCharFreq().get(lData);
             // Iterate the NumberOfSamples. (Per chirp data.)
@@ -371,7 +427,7 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
         // Reset the Offset.
         lOffset = 0;
         // Iterate between each sample.
-        for(int i = 0; i < lTransmission.length(); i++) {
+        for(int i = 0; i < pData.length(); i++) {
             // Fetch the Start and End Indexes of the Sample.
             final int lIo =   i * lNumberOfSamples;
             final int lIa = lIo + lNumberOfSamples;
