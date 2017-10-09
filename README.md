@@ -9,7 +9,7 @@ Put simply, a sender and receiver make an _a priori_ agreement of which frequenc
 The coolest thing? When you're not sending the symbols in the `40kHz` (ultrasonic, inaudable) range, they sound like a cute little bird singing its goddamn head off.
 
 ## What's in these examples?
-Each example contains a transmitter and receiver example. Additionally, the example projects are capable of listening to _themselves_, so there's no need for swapping between multiple devices whilst you're just testing stuff out.
+Each example contains a transmitter and receiver implementatation that are capable of listening to _themselves_, so there's no need for swapping between multiple devices whilst you're just testing stuff out.
 
 ## Dependencies
   - [`zxing-core`](https://github.com/zxing/zxing)
