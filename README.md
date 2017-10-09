@@ -12,7 +12,7 @@ The coolest thing? When you're not sending the symbols in the `40kHz` (ultrasoni
 Each example contains a transmitter and receiver example. Additionally, the example projects are capable of listening to _themselves_, so there's no need for swapping between multiple devices whilst you're just testing stuff out.
 
 ## Dependencies
-The Chirp protocol uses the [Galois Transform](https://en.wikipedia.org/wiki/Galois_theory) to encode and append redundant symbols to the payload in order to counteract the effects of the lossy surrounding environment. This is a complicated process, though luckily it is also a widely used one. This repository makes use of [`zxing-core`](https://github.com/zxing/zxing), which applies the `GenericGF` `class` that is used to encode and decode QR codes.
+The Chirp protocol uses the [Galois Transform](https://en.wikipedia.org/wiki/Galois_theory) to encode and append redundant symbols to the payload in order to counteract the effects of the lossy surrounding environment. This is a complicated process, although luckily it's also a widely used one. This repository makes use of [`zxing-core`](https://github.com/zxing/zxing), which applies the `GenericGF` `class` that is used to encode and decode QR codes.
 
 ## Background
 There's little lying around about the fundamentals in how Chirp protocol style data is put together; most notably because the official protocol obscures the lower-level information on how signal data is encoded. Take the [chirp-arduino example](https://github.com/chirp/chirp-arduino):
