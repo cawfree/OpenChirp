@@ -2,7 +2,12 @@
 An open source implementation of the [Chirp](chirp.io) data-over-audio protocol.
 
 ## What's Chirp?
-Back in 2016, the awesome [developers behind Chirp](https://www.chirp.io/about) devised of a protocol for encoding and transmitting data over the audial range. Put simply, a sender and receiver make an _a priori_ agreement of which frequencies correspond to which letters of a shared alphabet. The sender then takes an arbitrary message and maps it to the corresponding frequency range, whilst the listener transforms the frequencies it hears back into the original data.
+Back in 2016, the [developers behind Chirp](https://www.chirp.io/about) devised of a protocol for encoding and transmitting data over the audial range. Put simply, a sender and receiver make an _a priori_ agreement of which frequencies correspond to which letters of a shared alphabet. The sender then takes an arbitrary message and maps it to the corresponding frequency range and appends a couple of error handling symbols, whilst the listener transforms the frequencies it hears back into the original data. 
+
+The coolest thing? When you're not sending the symbols in the `40kHz` (ultrasonic, inaudable) range, they sound like a cute little bird singing its head off.
+
+## What's in these examples?
+Each example contains a transmitter and receiver example. Additionally, they are capable of listening to _themselves_, so there's no need for multiple devices for when you're testing stuff out.
 
 ## Dependencies
 The Chirp protocol uses the [_Galois Transform_](https://en.wikipedia.org/wiki/Galois_theory) to encode and append redundant symbols to the payload in order to counteract the effects of the lossy surrounding environment. This is a complicated process, though luckily it is also a widely used one. This repository makes use of [`zxing-core`](https://github.com/zxing/zxing), which applies the `GenericGF` `class` that is used to encode and decode QR codes.
@@ -16,6 +21,7 @@ void loop() {
    delay(2000);
 }
 ```
+In this example, the Arduino microcontroller will repeatedly chirp the signal `"parrotbilllllahcm4"` every two seconds. This can be split into two parts; the _data frame_ (`parrotbill`) and the _error frame_ (`lllahcm4`). The `error frame` is actually a function of the _data frame_, since its symbol data is encoded using a Galois polynomial. This process has been left open for speculation for quite a while until now, so let's see how it works.
 
 ## Interested in contributing?
 This is an active project. Currently, we've only provided an example implementation in [Android](https://github.com/Cawfree/OpenChirp/tree/master/android), but due to the diverse nature of sound, there are very many platforms that could be configured as a transmitter or receiver for the protocol. Please drop me a line at `cawfree@gmail.com` if you're interested.
