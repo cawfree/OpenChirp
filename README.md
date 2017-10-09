@@ -15,10 +15,6 @@ The coolest thing? When you're not sending the symbols in the `40kHz` (ultrasoni
 ## What's in these examples?
 Each example contains a transmitter and receiver implementatation that are capable of listening to _themselves_, so there's no need for swapping between multiple devices whilst you're just testing stuff out.
 
-## Dependencies
-  - [`zxing-core`](https://github.com/zxing/zxing)
-  - [TarsosDSP](https://github.com/JorenSix/TarsosDSP)
-
 ## Background
 There's little lying around about the fundamentals in how Chirp protocol style data is put together; most notably because the official protocol obscures the lower-level information on how signal data is encoded. Take the [chirp-arduino example](https://github.com/chirp/chirp-arduino):
 
@@ -85,3 +81,7 @@ If you're interested in finding more information on this process, here are some 
 This is an active project. Currently, we've only provided an example implementation in [Android](https://github.com/Cawfree/OpenChirp/tree/master/android), but due to the diverse nature of sound, there are very many platforms that could be configured as a transmitter or receiver for the protocol. 
 
 Feel free to drop me a line at [`@cawfree`](https://twitter.com/cawfree).
+
+## Dependencies
+  - [`zxing-core`](https://github.com/zxing/zxing)
+  - [TarsosDSP](https://github.com/JorenSix/TarsosDSP)
