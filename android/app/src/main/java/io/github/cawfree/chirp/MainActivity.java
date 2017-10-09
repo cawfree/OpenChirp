@@ -26,20 +26,16 @@ import be.tarsos.dsp.pitch.PitchDetectionHandler;
 import be.tarsos.dsp.pitch.PitchDetectionResult;
 import be.tarsos.dsp.pitch.PitchProcessor;
 
-public class MainActivity extends AppCompatActivity implements PitchDetectionHandler {
+public class MainActivity extends AppCompatActivity {
 
     /* Logging. */
     private static final String TAG = "chirp.io";
-
-    /** TODO: As customizable. */
-
-    // 120, filter 0.65
 
     /** TODO: How to function based on the symbol period? */
     private static final ChirpFactory FACTORY_CHIRP = new ChirpFactory.Builder().setSymbolPeriodMs(85).build();
 
     /* Sampling Declarations. */
-    private static final int WRITE_AUDIO_RATE_SAMPLE_HZ = 44100;
+    private static final int WRITE_AUDIO_RATE_SAMPLE_HZ = 44100; // (Guaranteed for all devices!)
     private static final int WRITE_NUMBER_OF_SAMPLES    = (int)(MainActivity.FACTORY_CHIRP.getEncodedLength() * (MainActivity.FACTORY_CHIRP.getSymbolPeriodMs() / 1000.0f) * MainActivity.WRITE_AUDIO_RATE_SAMPLE_HZ);
     private static final int READ_NUMBER_OF_SAMPLES     = ((int)((MainActivity.FACTORY_CHIRP.getSymbolPeriodMs() / 1000.0f) * MainActivity.WRITE_AUDIO_RATE_SAMPLE_HZ));
     private static final int READ_SUBSAMPLING_FACTOR    = 8;
@@ -169,21 +165,19 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
                 return this.mPitchProcessor;
             }
         });
-
-
-
-
-        // Register a PitchProcessor with the AudioDispatcher.
-        this.getAudioDispatcher().addAudioProcessor(new PitchProcessor(PitchProcessor.PitchEstimationAlgorithm.FFT_YIN, MainActivity.WRITE_AUDIO_RATE_SAMPLE_HZ, MainActivity.READ_NUMBER_OF_SAMPLES, this));
         // Register an OnTouchListener.
         this.findViewById(R.id.rl_activity_main).setOnClickListener(new View.OnClickListener() { @Override public final void onClick(final View pView) {
             // Are we not already chirping?
-//            if(!MainActivity.this.isChirping()) {
+            if(!MainActivity.this.isChirping()) {
                 // Declare the Message.
                 final String lMessage = "datadatada";//"datadatada";//"parrotbill"; // hj05142014
                 // ChirpFactory the message.
                 MainActivity.this.chirp(lMessage);
-//            }
+            }
+            else {
+                // Inform the developer.
+                Log.e(TAG, "Can't chirp whilst chirpin'!");
+            }
         } });
     }
 
@@ -223,7 +217,6 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
             try {
                 // Decode the Sample.
                 pReedSolomonDecoder.decode(lPacketized, MainActivity.FACTORY_CHIRP.getErrorLength());
-                /** TODO: Identifier handling. */
                 // Declare the search metric.
                 boolean lIsValid = true;
                 // Iterate the Identifier characters.
@@ -261,110 +254,6 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
     @Override public final void onRequestPermissionsResult(final int pRequestCode, final @NonNull String[] pPermissions, final @NonNull int[] pGrantResults) {
         super.onRequestPermissionsResult(pRequestCode, pPermissions, pGrantResults);
     }
-
-    /** Handles an update in Pitch measurement. */
-    @Override public final void handlePitch(final PitchDetectionResult pPitchDetectionResult, final AudioEvent pAudioEvent) {
-//        // Fetch the Pitch.
-//        final float   lPitch        = pPitchDetectionResult.getPitch();
-//        // Fetch the Time.
-//        final long    lTime         = System.currentTimeMillis();
-//        // Is it a valid chirp?
-//        final boolean lIsValidChirp = lPitch != -1 && lPitch >= FACTORY_CHIRP.getBaseFrequency(); /** TODO: Time might be an appropriate factor. */
-//        // Are we currently chirping?
-//        if(this.isChirping()) {
-//            // Are we not allowed to sample ourself?
-//            if(!this.isSampleSelf()) {
-//                // Return from the call. Do not process the sample.
-//                return;
-//            }
-//        }
-//        // Valid Pitch?
-//        if(lIsValidChirp) {
-//            // Update the SampleBuffer.
-//            MainActivity.this.onUpdatePitchBuffer(lPitch, lTime);
-//        }
-    }
-
-//    /** Updates the Sample Buffer. */
-//    private final void onUpdatePitchBuffer(final double pPitch, final long pCurrentTimeMillis) {
-//        // Shift all of the frequencies along.
-//        for(int i = 0; i < this.getPitchBuffer().length - 1; i++) {
-//            // Slide the values along.
-//            this.getPitchBuffer()[i] = this.getPitchBuffer()[i + 1];
-//        }
-//        // Append the Sample to the end of the Sample Buffer.
-//        this.getPitchBuffer()[this.getPitchBuffer().length - 1] = pPitch;
-//        // Determine if the header has been detected. Declare the search metric.
-//        boolean lIsFound = true;
-//        // Iterate the Identifier.
-//        for(int i = 0; i < FACTORY_CHIRP.getIdentifier().length(); i++) {
-//            // Update the Search Metric.
-//            lIsFound &= this.getCharacterAt(i).equals(FACTORY_CHIRP.getIdentifier().charAt(i));
-//        }
-//
-//        // Could we find the Identifier?
-//        if(lIsFound) {
-//            // Prepare the String.
-//            String lMessage = "";
-//            // Iterate the Data.
-//            for(int i = 0; i < MainActivity.FACTORY_CHIRP.getEncodedLength(); i++) { /** TODO: Fetch indices directly instead. */
-//                // Append the read characters.
-//                lMessage += this.getCharacterAt(i);
-//            }
-//            // Declare the ResultBuffer.
-//            final int[] lResult = new int[MainActivity.FACTORY_CHIRP.getRange().getFrameLength()];
-//            // Iterate the data-style characters.
-//            for(int i = 0; i < FACTORY_CHIRP.getIdentifier().length() + FACTORY_CHIRP.getPayloadLength(); i++) {
-//                // Update the Result with the corresponding index value.
-//                lResult[i] = FACTORY_CHIRP.getRange().getCharacters().indexOf(lMessage.charAt(i));
-//            }
-//            // Iterate the error correction characters.
-//            for(int i = 0; i < FACTORY_CHIRP.getErrorLength(); i++) {
-//                // Update the Result with the corresponding index value.
-//                lResult[(lResult.length - FACTORY_CHIRP.getErrorLength()) + i] = FACTORY_CHIRP.getRange().getCharacters().indexOf(lMessage.charAt( FACTORY_CHIRP.getIdentifier().length() + FACTORY_CHIRP.getPayloadLength() + i));
-//            }
-//
-//            try {
-//                // Attempt to decode the result.
-//                this.getReedSolomonDecoder().decode(lResult, MainActivity.FACTORY_CHIRP.getErrorLength());
-//                // Reset the Message.
-//                lMessage = "";
-//                // Iterate the Result.
-//                for(int i = 0; i < FACTORY_CHIRP.getIdentifier().length() + FACTORY_CHIRP.getPayloadLength(); i++) {
-//                    // Buffer the decoded character.
-//                    lMessage += FACTORY_CHIRP.getRange().getCharacters().charAt(lResult[i]);
-//                }
-//                // Log the detected chirp.
-//                Log.d(TAG, "Rx(" + lMessage + ")");
-//            }
-//            catch (final ReedSolomonException pReedSolomonException) {
-//                // Here, we ignore undetected chirps.
-//                // Print the Stack Trace.
-//                //pReedSolomonException.printStackTrace();
-//            }
-//        }
-//    }
-
-//    /** Returns the character at a normalized index. (Compensates for the fact that the PitchBuffer is a multiple of samples per index.) */
-//    private final Character getCharacterAt(final int pIndex) {
-//        // Fetch the Frequencies.
-//        final double    lFo = this.getPitchBuffer()[(pIndex * MainActivity.SIZE_READ_BUFFER_PER_ELEMENT) + 0];
-//        final double    lFa = this.getPitchBuffer()[(pIndex * MainActivity.SIZE_READ_BUFFER_PER_ELEMENT) + 1];
-//        // Fetch the Characters.
-//        final Character lCo = this.getCharacterFor(lFo);
-//        final Character lCa = this.getCharacterFor(lFa);
-//        // Are they equal?
-//        if(lCo == lCa) {
-//            // Return the Character.
-//            return lCo;
-//        }
-//        else {
-//            // Return the character for the average frequency. (Use a geometric mean.)
-//            return this.getCharacterFor(Math.sqrt(lFo * lFa));
-//        }
-//    }
-
-
 
     /** Handle resumption of the Activity. */
     @Override protected final void onResume() {
@@ -585,10 +474,6 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
     public final boolean isSampleSelf() {
         return this.mSampleSelf;
     }
-
-//    private final double[] getPitchBuffer() {
-//        return this.mPitchBuffer;
-//    }
 
     private final double[] getSampleBuffer() {
         return this.mSampleBuffer;
