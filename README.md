@@ -1,5 +1,19 @@
 # OpenChirp
-A reverse-engineered implementation of the Chirp data-over-audio protocol.
+An open source implementation of the [Chirp](chirp.io) data-over-audio protocol.
+
+## What's Chirp?
+Back in 2016, the awesome [developers behind Chirp](https://www.chirp.io/about) devised of a protocol for encoding and transmitting data over the audio range. Simply, a sender and receiver make an _a priori_ agreement of which frequencies correspond to which letters of a shared alphabet. The sender takes an arbitrary message and maps it to the frequency _alphabet_, and the listener transforms the frequencies it hears back into the original data.
+
+## Dependencies
+The Chirp protocol uses the [_Galois Transform_](https://en.wikipedia.org/wiki/Galois_theory) to encode and append redundant symbols to the payload in order to counteract the effects of the lossy surrounding environment. This is a complicated process, though luckily it is also a widely used one. This repository makes use of [`zxing-core`](https://github.com/zxing/zxing), which applies the `GenericGF` `class` that is used to encode and decode QR codes.
+
+## Interested in contributing?
+Currently, there is only the 
+
+## Background
+In 
+
+###
 
 // works with chirp share
 "hj050422014jikhif"
