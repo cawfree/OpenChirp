@@ -12,8 +12,8 @@ The coolest thing? When you're not sending the symbols in the `40kHz` (ultrasoni
 Each example contains a transmitter and receiver example. Additionally, the example projects are capable of listening to _themselves_, so there's no need for swapping between multiple devices whilst you're just testing stuff out.
 
 ## Dependencies
-  - This repository makes use of [`zxing-core`](https://github.com/zxing/zxing), which applies the `GenericGF` `class` that is used to encode and decode QR codes.
-  - Over on Android, we're using [TarsosDSP](https://github.com/JorenSix/TarsosDSP) for fourier-domain frequency analysis with native speed.
+  - [`zxing-core`](https://github.com/zxing/zxing), using the `ReedSolomonDecoder`/`ReedSolomonDecoder`/`GenericGF` `class`es.
+  - [TarsosDSP](https://github.com/JorenSix/TarsosDSP) for fourier-domain frequency analysis with native speed.
 
 ## Background
 There's little lying around about the fundamentals in how Chirp protocol style data is put together; most notably because the official protocol obscures the lower-level information on how signal data is encoded. Take the [chirp-arduino example](https://github.com/chirp/chirp-arduino):
