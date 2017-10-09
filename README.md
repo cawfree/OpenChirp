@@ -78,7 +78,9 @@ If you're interested in finding more information on this process, here are some 
   - [Carnegie Mellon School of Computer Science](https://www.cs.cmu.edu/~guyb/realworld/reedsolomon/reed_solomon_codes.html)
 
 ## Interested in contributing?
-This is an active project. Currently, we've only provided an example implementation in [Android](https://github.com/Cawfree/OpenChirp/tree/master/android), but due to the diverse nature of sound, there are very many platforms that could be configured as a transmitter or receiver for the protocol. Please drop me a line at `cawfree@gmail.com` if you're interested.
+This is an active project. Currently, we've only provided an example implementation in [Android](https://github.com/Cawfree/OpenChirp/tree/master/android), but due to the diverse nature of sound, there are very many platforms that could be configured as a transmitter or receiver for the protocol. 
+
+Feel free to drop me a line at `@cawfree`.
 
 ###
 
