@@ -12,9 +12,8 @@ The coolest thing? When you're not sending the symbols in the `40kHz` (ultrasoni
 Each example contains a transmitter and receiver example. Additionally, the example projects are capable of listening to _themselves_, so there's no need for swapping between multiple devices whilst you're just testing stuff out.
 
 ## Dependencies
-The Chirp protocol uses the [Galois Transform](https://en.wikipedia.org/wiki/Galois_theory) and [Reed-Solomon Encoding](https://en.wikipedia.org/wiki/Reed%E2%80%93Solomon_error_correction) to encode and append redundant symbols to the payload in order to counteract the effects of the lossy surrounding environment using error correction. This is a complicated process, although luckily it's also a widely used one. This repository makes use of [`zxing-core`](https://github.com/zxing/zxing), which applies the `GenericGF` `class` that is used to encode and decode QR codes.
-
-Over on Android, we're using [TarsosDSP](https://github.com/JorenSix/TarsosDSP) for fourier-domain frequency analysis with native speed.
+  - This repository makes use of [`zxing-core`](https://github.com/zxing/zxing), which applies the `GenericGF` `class` that is used to encode and decode QR codes.
+  - Over on Android, we're using [TarsosDSP](https://github.com/JorenSix/TarsosDSP) for fourier-domain frequency analysis with native speed.
 
 ## Background
 There's little lying around about the fundamentals in how Chirp protocol style data is put together; most notably because the official protocol obscures the lower-level information on how signal data is encoded. Take the [chirp-arduino example](https://github.com/chirp/chirp-arduino):
@@ -26,7 +25,7 @@ void loop() {
 }
 ```
 
-In this example, the Arduino microcontroller will repeatedly chirp the signal `"parrotbilllllahcm4"` every two seconds. This can be split into two parts; the _data frame_ (`parrotbill`) and the _error frame_ (`lllahcm4`). The _error frame_ is actually a function of the _data frame_, since its symbol data is encoded using a Galois polynomial.
+In this example, the Arduino microcontroller will repeatedly chirp the signal `"parrotbilllllahcm4"` every two seconds. This can be split into two parts; the _data frame_ (`parrotbill`) and the _error frame_ (`lllahcm4`). The Chirp protocol uses the [Galois Transform](https://en.wikipedia.org/wiki/Galois_theory) and [Reed-Solomon Encoding](https://en.wikipedia.org/wiki/Reed%E2%80%93Solomon_error_correction) to encode and append redundant symbols to the payload in order to counteract the effects of the lossy surrounding environment using error correction. This is what generates the _error frame_.
 
 Usually, Chirp data is sent alongside an additional _header frame_, which can be used to filter out only to interested listeners. In many examples, this is `hj`, which should be considered as _reserved space_ for the original Chirp protocol.
 
