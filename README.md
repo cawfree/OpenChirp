@@ -14,7 +14,7 @@ Each example contains a transmitter and receiver example. Additionally, the exam
 ## Dependencies
 The Chirp protocol uses the [Galois Transform](https://en.wikipedia.org/wiki/Galois_theory) and [Reed-Solomon Encoding](https://en.wikipedia.org/wiki/Reed%E2%80%93Solomon_error_correction) to encode and append redundant symbols to the payload in order to counteract the effects of the lossy surrounding environment using error correction. This is a complicated process, although luckily it's also a widely used one. This repository makes use of [`zxing-core`](https://github.com/zxing/zxing), which applies the `GenericGF` `class` that is used to encode and decode QR codes.
 
-tardosDSP
+Over on Android, we're using [TarsosDSP](https://github.com/JorenSix/TarsosDSP) for fourier-domain frequency analysis with native speed.
 
 ## Background
 There's little lying around about the fundamentals in how Chirp protocol style data is put together; most notably because the official protocol obscures the lower-level information on how signal data is encoded. Take the [chirp-arduino example](https://github.com/chirp/chirp-arduino):
