@@ -1,7 +1,9 @@
 # OpenChirp
 An open source implementation of the [Chirp](chirp.io) data-over-audio protocol.
 
-<div style="text-align:center"><img src ="https://i.imgur.com/rP7JR3H.png" /></div>
+<p align="center">
+  <img src ="https://i.imgur.com/rP7JR3H.png" />
+</p>
 
 ## What's Chirp?
 Back in 2016, the [developers behind Chirp](https://www.chirp.io/about) devised of a protocol for encoding and transmitting data using the audial range, as this would be a common interface between a great many different devices. 
