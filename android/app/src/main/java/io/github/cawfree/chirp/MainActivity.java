@@ -16,8 +16,6 @@ import com.google.zxing.common.reedsolomon.ReedSolomonEncoder;
 import com.google.zxing.common.reedsolomon.ReedSolomonException;
 
 import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
 
 import be.tarsos.dsp.AudioDispatcher;
 import be.tarsos.dsp.AudioEvent;
@@ -37,22 +35,14 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
 
     // 120, filter 0.65
 
-    private static final ChirpFactory           FACTORY_CHIRP                = new ChirpFactory.Builder().setSymbolPeriodMs(90).build();
+    /** TODO: How to function based on the symbol period? */
+    private static final ChirpFactory FACTORY_CHIRP = new ChirpFactory.Builder().setSymbolPeriodMs(85).build();
 
     /* Sampling Declarations. */
     private static final int WRITE_AUDIO_RATE_SAMPLE_HZ = 44100;
     private static final int WRITE_NUMBER_OF_SAMPLES    = (int)(MainActivity.FACTORY_CHIRP.getEncodedLength() * (MainActivity.FACTORY_CHIRP.getSymbolPeriodMs() / 1000.0f) * MainActivity.WRITE_AUDIO_RATE_SAMPLE_HZ);
     private static final int READ_NUMBER_OF_SAMPLES     = ((int)((MainActivity.FACTORY_CHIRP.getSymbolPeriodMs() / 1000.0f) * MainActivity.WRITE_AUDIO_RATE_SAMPLE_HZ));
-
-
-
-//    // Declare the SubFactor.
-//    final int lSubFactor = 4;
-
-    private static final int READ_SUBSAMPLING_FACTOR = 8;
-
-
-    // we aim to make N samples per period
+    private static final int READ_SUBSAMPLING_FACTOR    = 8;
 
     /** Creates a ChirpFactory from a ChirpBuffer. */
     public static final String getChirp(final int[] pChirpBuffer, final int pChirpLength) {
@@ -72,7 +62,20 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
         return lChirp;
     }
 
-    // hj058042201576ikir
+    /** Inserts an element at the end of the array, pushing all other elements down towards lesser indices. Returns the popped element. */
+    private static final double push(final double[] pBuffer, final double pT) {
+        // Fetch the first element.
+        final double lPopped = pBuffer[0];
+        // Iterate the Buffer.
+        for(int i = 0; i < pBuffer.length - 1; i++) {
+            // Offset the entries.
+            pBuffer[i] = pBuffer[i + 1];
+        }
+        // Append the new sample.
+        pBuffer[pBuffer.length - 1] = pT;
+        // Return the Popped sample.
+        return lPopped;
+    }
 
     /* Member Variables. */
     private AudioTrack         mAudioTrack;
@@ -81,8 +84,9 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
     private AudioDispatcher    mAudioDispatcher;
     private Thread             mAudioThread;
     private boolean            mChirping;
-//    private double[]           mPitchBuffer; /** TODO: Array of timestamps too, which verify whether the pitches are recent too */
     private boolean            mSampleSelf;
+    private double[]           mSampleBuffer;
+    private double[]           mConfidenceBuffer;
 
     /** TODO: How to know the transmission medium is free? */
 
@@ -104,20 +108,35 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
         this.mChirping           = false;
         // Define whether we should listen to our own chirps.
         this.mSampleSelf         = true;
-//        // Allocate the SampleBuffer, compensating for the size of the read buffer for each data segment.
-//        this.mPitchBuffer        = new double[MainActivity.FACTORY_CHIRP.getEncodedLength() * MainActivity.SIZE_READ_BUFFER_PER_ELEMENT];
+        // Declare the SampleBuffer; capable of storing an entire chirp, with each symbol sampled at the sub-sampling rate.
+        this.mSampleBuffer       = new double[MainActivity.READ_SUBSAMPLING_FACTOR * MainActivity.FACTORY_CHIRP.getEncodedLength()];
+        // Allocate the ConfidenceBuffer; declares the corresponding confidence for each sample.
+        this.mConfidenceBuffer   = this.getSampleBuffer().clone();
         // Allocate the AudioDispatcher. (Note; requires dangerous permissions!)
         this.mAudioDispatcher    = AudioDispatcherFactory.fromDefaultMicrophone(MainActivity.WRITE_AUDIO_RATE_SAMPLE_HZ, MainActivity.READ_NUMBER_OF_SAMPLES, 0); /** TODO: Abstract constants. */
         // Define a Custom AudioProcessor.
         this.getAudioDispatcher().addAudioProcessor(new AudioProcessor() {
             /* Member Variables. */
             private final PitchProcessor mPitchProcessor = new PitchProcessor(PitchProcessor.PitchEstimationAlgorithm.FFT_YIN, MainActivity.WRITE_AUDIO_RATE_SAMPLE_HZ, (MainActivity.READ_NUMBER_OF_SAMPLES / MainActivity.READ_SUBSAMPLING_FACTOR), new PitchDetectionHandler() { @Override public final void handlePitch(final PitchDetectionResult pPitchDetectionResult, final AudioEvent pAudioEvent) {
-                // Fetch the Pitch.
-                final double lPitch = pPitchDetectionResult.getPitch();
-                // Valid pitch?
-                if(lPitch != -1 && lPitch > MainActivity.FACTORY_CHIRP.getBaseFrequency()) { /** TODO: Define a tolerance. */
-                    Log.d(TAG, lPitch+" "+MainActivity.this.getCharacterFor(lPitch));
+                // Are we currently chirping?
+                if(MainActivity.this.isChirping()) {
+                    // Are we not allowed to sample ourself?
+                    if(!MainActivity.this.isSampleSelf()) {
+                        // Don't log the transactions.
+                        return;
+                    }
                 }
+                // Buffer the Pitch and the corresponding Confidence.
+                MainActivity.push(MainActivity.this.getSampleBuffer(),     pPitchDetectionResult.getPitch());
+                MainActivity.push(MainActivity.this.getConfidenceBuffer(), pPitchDetectionResult.getProbability());
+                // Process the signal.
+                MainActivity.onGaydecki(MainActivity.this.getReedSolomonDecoder(), MainActivity.this.getSampleBuffer(), MainActivity.this.getConfidenceBuffer(), MainActivity.READ_SUBSAMPLING_FACTOR, new ChirpFactory.IListener() { @Override public final void onChirp(final String pMessage) {
+                    // Print the chirp.
+                    Log.d(TAG, "Rx(" + pMessage + ")");
+                    // Clear the buffer; prevent multiple chirps coming through.
+                    Arrays.fill(MainActivity.this.getSampleBuffer(),    -1.0);
+                    Arrays.fill(MainActivity.this.getConfidenceBuffer(), 0.0);
+                } });
             } });
             /** When processing audio... */
             @Override public final boolean process(final AudioEvent pAudioEvent) {
@@ -166,6 +185,67 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
                 MainActivity.this.chirp(lMessage);
 //            }
         } });
+    }
+
+    /** Called when the samples have been updated. */
+    private static final void onGaydecki(final ReedSolomonDecoder pReedSolomonDecoder, final double[] pSamples, final double[] pConfidences, final int pSubsamples, final ChirpFactory.IListener pChirpListener) {
+        // Calculate the Number of Symbols.
+        final int    lSymbols      = (pSamples.length / pSubsamples);
+        // Declare the String.
+              String lAccumulation = "";
+        // Iterate the Samples whilst we're building up the string.
+        for(int i = 0; i < lSymbols && (lAccumulation.length() != MainActivity.FACTORY_CHIRP.getEncodedLength()); i++) {
+            // Fetch the Offset for the next Symbol.
+            final int lOffset = (i * pSubsamples);
+            // Detect the Chirp.
+            final ChirpFactory.Result lResult = ChirpFactory.DETECTOR_CHIRP_MEAN.getSymbol(MainActivity.FACTORY_CHIRP, pSamples, pConfidences, lOffset, pSubsamples);
+            // Is the Result valid?
+            if(lResult.isValid()) {
+                // Buffer the Result's data into the Accumulation.
+                lAccumulation += lResult.getCharacter();
+            }
+        }
+        // Is the accumulated data long enough?
+        if(lAccumulation.length() == MainActivity.FACTORY_CHIRP.getEncodedLength()) {
+            // Declare the Packetized Representation.
+            final int[] lPacketized = new int[MainActivity.FACTORY_CHIRP.getRange().getFrameLength()];
+            // Buffer the Header/Payload.
+            for(int i = 0; i < MainActivity.FACTORY_CHIRP.getIdentifier().length() + MainActivity.FACTORY_CHIRP.getPayloadLength(); i++) {
+                // Update the Packetized with the corresponding index value.
+                lPacketized[i] = MainActivity.FACTORY_CHIRP.getRange().getCharacters().indexOf(lAccumulation.charAt(i));
+            }
+            // Iterate the Error Symbols.
+            for(int i = 0; i < MainActivity.FACTORY_CHIRP.getErrorLength(); i++) {
+                // Update the Packetized with the corresponding index value.
+                lPacketized[MainActivity.FACTORY_CHIRP.getRange().getFrameLength() - MainActivity.FACTORY_CHIRP.getErrorLength() + i] = MainActivity.FACTORY_CHIRP.getRange().getCharacters().indexOf(lAccumulation.charAt(MainActivity.FACTORY_CHIRP.getIdentifier().length() + MainActivity.FACTORY_CHIRP.getPayloadLength() + i));
+            }
+            // Attempt to Reed/Solomon Decode.
+            try {
+                // Decode the Sample.
+                pReedSolomonDecoder.decode(lPacketized, MainActivity.FACTORY_CHIRP.getErrorLength());
+                /** TODO: Identifier handling. */
+                // Declare the search metric.
+                boolean lIsValid = true;
+                // Iterate the Identifier characters.
+                for(int i = 0; i < MainActivity.FACTORY_CHIRP.getIdentifier().length(); i++) {
+                    // Update the search metric.
+                    lIsValid &= MainActivity.FACTORY_CHIRP.getIdentifier().charAt(i) == (MainActivity.FACTORY_CHIRP.getRange().getCharacters().charAt(lPacketized[i]));
+                }
+                // Is the message directed to us?
+                if(lIsValid) {
+                    // Fetch the Message data.
+                    String lMessage = "";
+                    // Iterate the Packet.
+                    for(int i = MainActivity.FACTORY_CHIRP.getIdentifier().length(); i < MainActivity.FACTORY_CHIRP.getIdentifier().length() + MainActivity.FACTORY_CHIRP.getPayloadLength(); i++) {
+                        // Accumulate the Message.
+                        lMessage += MainActivity.FACTORY_CHIRP.getRange().getCharacters().charAt(lPacketized[i]);
+                    }
+                    // Call the callback.
+                    pChirpListener.onChirp(lMessage);
+                }
+            }
+            catch(final ReedSolomonException pReedSolomonException) { /* Do nothing; we're transmitting across a very lossy channel! */ }
+        }
     }
 
     /** Prints the equivalent information representation of a data string. */
@@ -284,30 +364,7 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
 //        }
 //    }
 
-    /** Returns the Character corresponding to a Frequency. */
-    private final Character getCharacterFor(final double pPitch) {
-        // Declare search metrics.
-        double lDistance = Double.POSITIVE_INFINITY;
-        int    lIndex    = -1;
-        // Iterate the Frequencies.
-        for(int i = 0; i < FACTORY_CHIRP.getFrequencies().length; i++) {
-            // Fetch the Frequency.
-            final Double lFrequency = FACTORY_CHIRP.getFrequencies()[i];
-            // Calculate the Delta.
-            final double lDelta     = Math.abs(pPitch - lFrequency);
-            // Is the Delta smaller than the current distance?
-            if(lDelta < lDistance) {
-                // Overwrite the Distance.
-                lDistance = lDelta;
-                // Track the Index.
-                lIndex    = i;
-            }
-        }
-        // Fetch the corresponding character.
-        final Character lCharacter = FACTORY_CHIRP.getMapFreqChar().get(Double.valueOf(FACTORY_CHIRP.getFrequencies()[lIndex]));
-        // Return the Character.
-        return lCharacter;
-    }
+
 
     /** Handle resumption of the Activity. */
     @Override protected final void onResume() {
@@ -347,10 +404,10 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
                 throw new UnsupportedOperationException("Message \"" + pMessage + "\" contains illegal characters.");
             }
         }
+        // Assert that we're transmitting the Message. (Don't show error checksum codewords or the identifer.)
+        Log.d(TAG, "Tx(" + pMessage + ")");
         // Append the Header.
         pMessage = FACTORY_CHIRP.getIdentifier().concat(pMessage);
-        // Assert that we're transmitting the Message. (Don't show error checksum codewords.)
-        Log.d(TAG, "Tx(" + pMessage + ")");
         // Declare the ChirpBuffer.
         final int[] lChirpBuffer = new int[MainActivity.FACTORY_CHIRP.getRange().getFrameLength()];
         // Fetch the indices of the Message.
@@ -427,7 +484,7 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
             final int lIo =   i * lNumberOfSamples;
             final int lIa = lIo + lNumberOfSamples;
             // Declare the RampWidth. We'll change it between iterations for more tuneful sound.)
-            final int lRw = (int)(lNumberOfSamples * 0.05);
+            final int lRw = (int)(lNumberOfSamples * 0.02);
             // Iterate the Ramp.
             for(int j = 0; j < lRw; j++) {
                 // Calculate the progression of the Ramp.
@@ -439,7 +496,7 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
         }
 
         // Declare the filtering constant.
-        final double lAlpha    = 0.65;
+        final double lAlpha    = 0.99;
               double lPrevious = 0;
 
         // Iterate the SampleArray.
@@ -532,5 +589,13 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
 //    private final double[] getPitchBuffer() {
 //        return this.mPitchBuffer;
 //    }
+
+    private final double[] getSampleBuffer() {
+        return this.mSampleBuffer;
+    }
+
+    private final double[] getConfidenceBuffer() {
+        return this.mConfidenceBuffer;
+    }
 
 }

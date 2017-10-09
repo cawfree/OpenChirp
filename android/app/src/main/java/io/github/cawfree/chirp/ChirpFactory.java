@@ -16,12 +16,100 @@ public class ChirpFactory {
     private static final int               MINIMUM_PERIOD_MS      = 120; /** TODO: Find performance improvements that allow us to beat Chirp. (<100ms). */
 
     /* Default Declarations. */
-    public static final int                DEFAULT_FREQUENCY_BASE = 1760;
-    public static final ChirpFactory.Range DEFAULT_RANGE          = new Range("0123456789abcdefghijklmnopqrstuv", 0b00100101, 31); /** TODO: i.e. 2^5 - 1. */
-    public static final String             DEFAULT_IDENTIFIER     = "hj";
-    public static final int                DEFAULT_LENGTH_PAYLOAD = 10;
-    public static final int                DEFAULT_LENGTH_CRC     = 8;
-    public static final int                DEFAULT_PERIOD_MS      = ChirpFactory.MINIMUM_PERIOD_MS;
+    public static final int                 DEFAULT_FREQUENCY_BASE = 1760;
+    public static final ChirpFactory.Range  DEFAULT_RANGE          = new Range("0123456789abcdefghijklmnopqrstuv", 0b00100101, 31); /** TODO: i.e. 2^5 - 1. */
+    public static final String              DEFAULT_IDENTIFIER     = "hj";
+    public static final int                 DEFAULT_LENGTH_PAYLOAD = 10;
+    public static final int                 DEFAULT_LENGTH_CRC     = 8;
+    public static final int                 DEFAULT_PERIOD_MS      = ChirpFactory.MINIMUM_PERIOD_MS;
+    public static final ChirpFactory.Result RESULT_UNKNOWN         = new Result(null, false);
+
+    /** Declares a ChirpResult. */
+    public static class Result {
+        /* Member Variables. */
+        private final Character mCharacter;
+        private final boolean   mValid;
+        /** Constructor. */
+        public Result(final Character pCharacter, final boolean pIsValid) {
+            // Initialize Member Variables.
+            this.mCharacter = pCharacter;
+            this.mValid     = pIsValid;
+        }
+        /* Getters. */
+        public final Character getCharacter() { return this.mCharacter; }
+        public final boolean   isValid()      { return this.mValid;     }
+    }
+
+    /** A base interface for a concrete class capable of interpreting chirp data. */
+    public interface IDetector {
+        /** Detects a Symbol within an array of Samples and Confidences. Callers must define the segment they wish to analyze within the provided buffers. */
+        ChirpFactory.Result getSymbol(final ChirpFactory pChirpFactory, final double[] pSamples, final double[] pConfidences, final int pOffset, final int pLength);
+    }
+
+    /** Called when a Chirp has beend detected. */
+    public interface IListener {
+        /** Called when a Chirp has been detected. Returns the response data. */
+        void onChirp(final String pMessage);
+    }
+
+    /** A default ChirpDetector, which uses an average to interpret symbols. */
+    public static final IDetector DETECTOR_CHIRP_MEAN = new IDetector() { @Override public final Result getSymbol(final ChirpFactory pChirpFactory, final double[] pSamples, final double[] pConfidences, final int pOffset, final int pLength) {
+        // Declare buffers to accumulate the sampled frequencies.
+        double lFacc  = 0.0;
+        int    lCount = 0;
+        // Iterate the Samples.
+        for(int i = pOffset + 2; i < pOffset + pLength - 2; i++) { /** TODO: fn */
+            // Are we confident in this sample?
+            if(pConfidences[i] > 0.75) {
+                // Fetch the Sample.
+                final double lSample = pSamples[i];
+                // Is the Sample valid?
+                if(lSample != -1) {
+                    // Accumulate the Sample.
+                    lFacc += lSample;
+                    // Update the accumulated count.
+                    lCount++;
+                }
+            }
+        }
+        // Result valid?
+        if(lCount != 0) {
+            // Calculate the Mean.
+            final double lMean = lFacc / lCount;
+            /** TODO: Frequency tolerance? */
+            // Return the Result.
+            return new ChirpFactory.Result(pChirpFactory.getCharacterFor(lMean), true);
+        }
+        else {
+            // Return the invalid result.
+            return ChirpFactory.RESULT_UNKNOWN;
+        }
+    } };
+
+    /** Returns the Character corresponding to a Frequency. */
+    public final Character getCharacterFor(final double pPitch) {
+        // Declare search metrics.
+        double lDistance = Double.POSITIVE_INFINITY;
+        int    lIndex    = -1;
+        // Iterate the Frequencies.
+        for(int i = 0; i < this.getFrequencies().length; i++) {
+            // Fetch the Frequency.
+            final Double lFrequency = this.getFrequencies()[i];
+            // Calculate the Delta.
+            final double lDelta     = Math.abs(pPitch - lFrequency);
+            // Is the Delta smaller than the current distance?
+            if(lDelta < lDistance) {
+                // Overwrite the Distance.
+                lDistance = lDelta;
+                // Track the Index.
+                lIndex    = i;
+            }
+        }
+        // Fetch the corresponding character.
+        final Character lCharacter = this.getMapFreqChar().get(Double.valueOf(this.getFrequencies()[lIndex]));
+        // Return the Character.
+        return lCharacter;
+    }
 
 
     /** Defines the set of allowable characters for a given protocol. */
