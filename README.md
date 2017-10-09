@@ -33,9 +33,10 @@ Usually, Chirp data is sent alongside an additional _header frame_, which can be
 ## Worked Example using _Octave_
 The [Chirp Developer Guide](developers.chirp.io/docs/chirps-shortcodes) uses the code `n3a67aai1o` as an example of a data payload. When passed through the encoding process, the resulting identfier is expected to be `n3a67aai1o1miprkd8`.
 
-Below, we break down the encoding process using [_Octave_](https://www.gnu.org/software/octave/) and the [_Communications_](https://octave.sourceforge.io/communications/) extension:
+Below, we break down the encoding process using [_Octave_](https://www.gnu.org/software/octave/) and the [_Communications_](https://octave.sourceforge.io/communications/) extension. 
 
 ```
+# Ubuntu? sudo apt-get update, sudo apt-get install octave octave-communications
 # Load the communications package.
 pkg load communications 
 
@@ -69,12 +70,13 @@ code=rsenc(msg, n, k, gen);
 ```
 __Note:__ This is example was sourced from the excellent book [_Real-Time Digital Signal Processing: Implementations and Applications_](https://books.google.co.uk/books?id=QIj9Pthp_T8C&pg=PA569&lpg=PA569&dq=reed+solomon+2%5E5&source=bl&ots=kBzfAyfry_&sig=T7AcjbdMjSNXNl1o1ETlAMfDuyg&hl=en&sa=X&ved=0ahUKEwiJu6am4M3WAhXBbRQKHQoPDIg4ChDoAQgnMAA#v=onepage&q=reed%20solomon%202%5E5&f=false).
 
-The resulting value stored into the `code` array is `[23 3 10 6 7 10 10 18 1 24 0 0 0 0 0 0 0 0 0 0 0 0 0 1 22 18 25 27 20 13 8]`. Compensating for zero padding, this can be interpreted as `[23 3 10 6 7 10 10 18 1 24 1 22 18 25 27 20 13 8]`. By cross-referencing these values against the alphabet, you'll see that this array is equivalent to `n3a67aai1o1miprkd8`.
+The resulting value stored into the `code` array is `[23 3 10 6 7 10 10 18 1 24 0 0 0 0 0 0 0 0 0 0 0 0 0 1 22 18 25 27 20 13 8]`. Compensating for zero padding, this can be interpreted as `[23 3 10 6 7 10 10 18 1 24 1 22 18 25 27 20 13 8]`. 
 
+By cross-referencing these values against the alphabet, you'll see that the resulting array is equivalent to `n3a67aai1o1miprkd8`.
 
-alphabet x, gives polynomial simplest as 
-
-
+If you're interested in finding more information on this process, here are some invaluable resources:
+  - [BBC Worked Example](https://downloads.bbc.co.uk/rd/pubs/whp/whp-pdf-files/WHP031.pdf)
+  - [Carnegie Mellon School of Computer Science](https://www.cs.cmu.edu/~guyb/realworld/reedsolomon/reed_solomon_codes.html)
 
 ## Interested in contributing?
 This is an active project. Currently, we've only provided an example implementation in [Android](https://github.com/Cawfree/OpenChirp/tree/master/android), but due to the diverse nature of sound, there are very many platforms that could be configured as a transmitter or receiver for the protocol. Please drop me a line at `cawfree@gmail.com` if you're interested.
