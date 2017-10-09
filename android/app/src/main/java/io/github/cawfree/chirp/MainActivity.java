@@ -38,7 +38,7 @@ public class MainActivity extends AppCompatActivity {
     private static final int WRITE_AUDIO_RATE_SAMPLE_HZ = 44100; // (Guaranteed for all devices!)
     private static final int WRITE_NUMBER_OF_SAMPLES    = (int)(MainActivity.FACTORY_CHIRP.getEncodedLength() * (MainActivity.FACTORY_CHIRP.getSymbolPeriodMs() / 1000.0f) * MainActivity.WRITE_AUDIO_RATE_SAMPLE_HZ);
     private static final int READ_NUMBER_OF_SAMPLES     = ((int)((MainActivity.FACTORY_CHIRP.getSymbolPeriodMs() / 1000.0f) * MainActivity.WRITE_AUDIO_RATE_SAMPLE_HZ));
-    private static final int READ_SUBSAMPLING_FACTOR    = 8;
+    private static final int READ_SUBSAMPLING_FACTOR    = 9;
 
     /** Creates a ChirpFactory from a ChirpBuffer. */
     public static final String getChirp(final int[] pChirpBuffer, final int pChirpLength) {
@@ -373,7 +373,7 @@ public class MainActivity extends AppCompatActivity {
             final int lIo =   i * lNumberOfSamples;
             final int lIa = lIo + lNumberOfSamples;
             // Declare the RampWidth. We'll change it between iterations for more tuneful sound.)
-            final int lRw = (int)(lNumberOfSamples * 0.02);
+            final int lRw = (int)(lNumberOfSamples * 0.3);
             // Iterate the Ramp.
             for(int j = 0; j < lRw; j++) {
                 // Calculate the progression of the Ramp.
@@ -385,7 +385,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         // Declare the filtering constant.
-        final double lAlpha    = 0.99;
+        final double lAlpha    = 0.3;
               double lPrevious = 0;
 
         // Iterate the SampleArray.

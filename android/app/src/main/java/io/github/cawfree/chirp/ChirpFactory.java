@@ -4,6 +4,8 @@ package io.github.cawfree.chirp;
  * Created by cawfree on 05/10/17.
  */
 
+import android.util.Log;
+
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -54,11 +56,13 @@ public class ChirpFactory {
 
     /** A default ChirpDetector, which uses an average to interpret symbols. */
     public static final IDetector DETECTOR_CHIRP_MEAN = new IDetector() { @Override public final Result getSymbol(final ChirpFactory pChirpFactory, final double[] pSamples, final double[] pConfidences, final int pOffset, final int pLength) {
+        // Ignore the First/Last 18% of the Samples. (Protected against slew rate.)
+        final int    lIgnore = (int)Math.ceil(pLength * 0.3);
         // Declare buffers to accumulate the sampled frequencies.
-        double lFacc  = 0.0;
-        int    lCount = 0;
+              double lFacc   = 0.0;
+              int    lCount  = 0;
         // Iterate the Samples.
-        for(int i = pOffset + 2; i < pOffset + pLength - 2; i++) { /** TODO: fn */
+        for(int i = pOffset + lIgnore; i < pOffset + pLength - lIgnore; i++) { /** TODO: fn */
             // Are we confident in this sample?
             if(pConfidences[i] > 0.75) {
                 // Fetch the Sample.
