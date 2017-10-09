@@ -37,12 +37,20 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
 
     // 120, filter 0.65
 
-    private static final ChirpFactory           FACTORY_CHIRP                = new ChirpFactory.Builder().setSymbolPeriodMs(120).build();
-    private static final int                    SIZE_READ_BUFFER_PER_ELEMENT = 2;
+    private static final ChirpFactory           FACTORY_CHIRP                = new ChirpFactory.Builder().setSymbolPeriodMs(90).build();
 
     /* Sampling Declarations. */
     private static final int WRITE_AUDIO_RATE_SAMPLE_HZ = 44100;
-    private static final int WRITE_NUMBER_OF_SAMPLES    = (int)(MainActivity.FACTORY_CHIRP.getEncodedLength() * (MainActivity.FACTORY_CHIRP.getSymbolPeriodMs() / 1000.0f) * MainActivity.WRITE_AUDIO_RATE_SAMPLE_HZ) * SIZE_READ_BUFFER_PER_ELEMENT;
+    private static final int WRITE_NUMBER_OF_SAMPLES    = (int)(MainActivity.FACTORY_CHIRP.getEncodedLength() * (MainActivity.FACTORY_CHIRP.getSymbolPeriodMs() / 1000.0f) * MainActivity.WRITE_AUDIO_RATE_SAMPLE_HZ);
+    private static final int READ_NUMBER_OF_SAMPLES     = ((int)((MainActivity.FACTORY_CHIRP.getSymbolPeriodMs() / 1000.0f) * MainActivity.WRITE_AUDIO_RATE_SAMPLE_HZ));
+
+
+
+//    // Declare the SubFactor.
+//    final int lSubFactor = 4;
+
+    private static final int READ_SUBSAMPLING_FACTOR = 8;
+
 
     // we aim to make N samples per period
 
@@ -73,7 +81,7 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
     private AudioDispatcher    mAudioDispatcher;
     private Thread             mAudioThread;
     private boolean            mChirping;
-    private double[]           mPitchBuffer; /** TODO: Array of timestamps too, which verify whether the pitches are recent too */
+//    private double[]           mPitchBuffer; /** TODO: Array of timestamps too, which verify whether the pitches are recent too */
     private boolean            mSampleSelf;
 
     /** TODO: How to know the transmission medium is free? */
@@ -96,18 +104,14 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
         this.mChirping           = false;
         // Define whether we should listen to our own chirps.
         this.mSampleSelf         = true;
-        // Allocate the SampleBuffer, compensating for the size of the read buffer for each data segment.
-        this.mPitchBuffer        = new double[MainActivity.FACTORY_CHIRP.getEncodedLength() * MainActivity.SIZE_READ_BUFFER_PER_ELEMENT];
-        // Calculate the FrameSize. (In Samples.)
-        final int lFrameSize = ((int)((MainActivity.FACTORY_CHIRP.getSymbolPeriodMs() / 1000.0f) * MainActivity.WRITE_AUDIO_RATE_SAMPLE_HZ)) / MainActivity.SIZE_READ_BUFFER_PER_ELEMENT;
+//        // Allocate the SampleBuffer, compensating for the size of the read buffer for each data segment.
+//        this.mPitchBuffer        = new double[MainActivity.FACTORY_CHIRP.getEncodedLength() * MainActivity.SIZE_READ_BUFFER_PER_ELEMENT];
         // Allocate the AudioDispatcher. (Note; requires dangerous permissions!)
-        this.mAudioDispatcher    = AudioDispatcherFactory.fromDefaultMicrophone(MainActivity.WRITE_AUDIO_RATE_SAMPLE_HZ, lFrameSize, 0); /** TODO: Abstract constants. */
-        // Declare the SubFactor.
-        final int lSubFactor = 4;
+        this.mAudioDispatcher    = AudioDispatcherFactory.fromDefaultMicrophone(MainActivity.WRITE_AUDIO_RATE_SAMPLE_HZ, MainActivity.READ_NUMBER_OF_SAMPLES, 0); /** TODO: Abstract constants. */
         // Define a Custom AudioProcessor.
         this.getAudioDispatcher().addAudioProcessor(new AudioProcessor() {
             /* Member Variables. */
-            private final PitchProcessor mPitchProcessor = new PitchProcessor(PitchProcessor.PitchEstimationAlgorithm.FFT_YIN, MainActivity.WRITE_AUDIO_RATE_SAMPLE_HZ, (lFrameSize / lSubFactor), new PitchDetectionHandler() { @Override public final void handlePitch(final PitchDetectionResult pPitchDetectionResult, final AudioEvent pAudioEvent) {
+            private final PitchProcessor mPitchProcessor = new PitchProcessor(PitchProcessor.PitchEstimationAlgorithm.FFT_YIN, MainActivity.WRITE_AUDIO_RATE_SAMPLE_HZ, (MainActivity.READ_NUMBER_OF_SAMPLES / MainActivity.READ_SUBSAMPLING_FACTOR), new PitchDetectionHandler() { @Override public final void handlePitch(final PitchDetectionResult pPitchDetectionResult, final AudioEvent pAudioEvent) {
                 // Fetch the Pitch.
                 final double lPitch = pPitchDetectionResult.getPitch();
                 // Valid pitch?
@@ -117,21 +121,12 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
             } });
             /** When processing audio... */
             @Override public final boolean process(final AudioEvent pAudioEvent) {
-                // Declare the TarsosDSPFormat; essentially make a safe copy of the existing setup.
-                final TarsosDSPAudioFormat lTarsosDSPAudioFormat = new TarsosDSPAudioFormat(
-                    getAudioDispatcher().getFormat().getEncoding(),
-                    getAudioDispatcher().getFormat().getSampleRate(),
-                    getAudioDispatcher().getFormat().getSampleSizeInBits() / lSubFactor,
-                    getAudioDispatcher().getFormat().getChannels(),
-                    getAudioDispatcher().getFormat().getFrameSize() / lSubFactor,
-                    getAudioDispatcher().getFormat().getFrameRate(),
-                    getAudioDispatcher().getFormat().isBigEndian(),
-                    getAudioDispatcher().getFormat().properties()
-                );
+                // Declare the TarsosDSPFormat; essentially make a safe copy of the existing setup, that recognizes the buffer has been split up.
+                final TarsosDSPAudioFormat lTarsosDSPAudioFormat = new TarsosDSPAudioFormat(getAudioDispatcher().getFormat().getEncoding(), getAudioDispatcher().getFormat().getSampleRate(), getAudioDispatcher().getFormat().getSampleSizeInBits() / MainActivity.READ_SUBSAMPLING_FACTOR, getAudioDispatcher().getFormat().getChannels(), getAudioDispatcher().getFormat().getFrameSize() / MainActivity.READ_SUBSAMPLING_FACTOR, getAudioDispatcher().getFormat().getFrameRate(), getAudioDispatcher().getFormat().isBigEndian(), getAudioDispatcher().getFormat().properties());
                 // Fetch the Floats.
                 final float[]    lFloats     = pAudioEvent.getFloatBuffer();
                 // Calculate the FrameSize.
-                final int        lFrameSize  = (lFloats.length / lSubFactor);
+                final int        lFrameSize  = (lFloats.length / MainActivity.READ_SUBSAMPLING_FACTOR);
                 // Iterate across the Floats.
                 for(int i = 0; i < (lFloats.length - lFrameSize); i += lFrameSize) {
                     // Segment the buffer.
@@ -160,7 +155,7 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
 
 
         // Register a PitchProcessor with the AudioDispatcher.
-        this.getAudioDispatcher().addAudioProcessor(new PitchProcessor(PitchProcessor.PitchEstimationAlgorithm.FFT_YIN, MainActivity.WRITE_AUDIO_RATE_SAMPLE_HZ, (lFrameSize), this));
+        this.getAudioDispatcher().addAudioProcessor(new PitchProcessor(PitchProcessor.PitchEstimationAlgorithm.FFT_YIN, MainActivity.WRITE_AUDIO_RATE_SAMPLE_HZ, MainActivity.READ_NUMBER_OF_SAMPLES, this));
         // Register an OnTouchListener.
         this.findViewById(R.id.rl_activity_main).setOnClickListener(new View.OnClickListener() { @Override public final void onClick(final View pView) {
             // Are we not already chirping?
@@ -189,105 +184,105 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
 
     /** Handles an update in Pitch measurement. */
     @Override public final void handlePitch(final PitchDetectionResult pPitchDetectionResult, final AudioEvent pAudioEvent) {
-        // Fetch the Pitch.
-        final float   lPitch        = pPitchDetectionResult.getPitch();
-        // Fetch the Time.
-        final long    lTime         = System.currentTimeMillis();
-        // Is it a valid chirp?
-        final boolean lIsValidChirp = lPitch != -1 && lPitch >= FACTORY_CHIRP.getBaseFrequency(); /** TODO: Time might be an appropriate factor. */
-        // Are we currently chirping?
-        if(this.isChirping()) {
-            // Are we not allowed to sample ourself?
-            if(!this.isSampleSelf()) {
-                // Return from the call. Do not process the sample.
-                return;
-            }
-        }
-        // Valid Pitch?
-        if(lIsValidChirp) {
-            // Update the SampleBuffer.
-            MainActivity.this.onUpdatePitchBuffer(lPitch, lTime);
-        }
+//        // Fetch the Pitch.
+//        final float   lPitch        = pPitchDetectionResult.getPitch();
+//        // Fetch the Time.
+//        final long    lTime         = System.currentTimeMillis();
+//        // Is it a valid chirp?
+//        final boolean lIsValidChirp = lPitch != -1 && lPitch >= FACTORY_CHIRP.getBaseFrequency(); /** TODO: Time might be an appropriate factor. */
+//        // Are we currently chirping?
+//        if(this.isChirping()) {
+//            // Are we not allowed to sample ourself?
+//            if(!this.isSampleSelf()) {
+//                // Return from the call. Do not process the sample.
+//                return;
+//            }
+//        }
+//        // Valid Pitch?
+//        if(lIsValidChirp) {
+//            // Update the SampleBuffer.
+//            MainActivity.this.onUpdatePitchBuffer(lPitch, lTime);
+//        }
     }
 
-    /** Updates the Sample Buffer. */
-    private final void onUpdatePitchBuffer(final double pPitch, final long pCurrentTimeMillis) {
-        // Shift all of the frequencies along.
-        for(int i = 0; i < this.getPitchBuffer().length - 1; i++) {
-            // Slide the values along.
-            this.getPitchBuffer()[i] = this.getPitchBuffer()[i + 1];
-        }
-        // Append the Sample to the end of the Sample Buffer.
-        this.getPitchBuffer()[this.getPitchBuffer().length - 1] = pPitch;
-        // Determine if the header has been detected. Declare the search metric.
-        boolean lIsFound = true;
-        // Iterate the Identifier.
-        for(int i = 0; i < FACTORY_CHIRP.getIdentifier().length(); i++) {
-            // Update the Search Metric.
-            lIsFound &= this.getCharacterAt(i).equals(FACTORY_CHIRP.getIdentifier().charAt(i));
-        }
+//    /** Updates the Sample Buffer. */
+//    private final void onUpdatePitchBuffer(final double pPitch, final long pCurrentTimeMillis) {
+//        // Shift all of the frequencies along.
+//        for(int i = 0; i < this.getPitchBuffer().length - 1; i++) {
+//            // Slide the values along.
+//            this.getPitchBuffer()[i] = this.getPitchBuffer()[i + 1];
+//        }
+//        // Append the Sample to the end of the Sample Buffer.
+//        this.getPitchBuffer()[this.getPitchBuffer().length - 1] = pPitch;
+//        // Determine if the header has been detected. Declare the search metric.
+//        boolean lIsFound = true;
+//        // Iterate the Identifier.
+//        for(int i = 0; i < FACTORY_CHIRP.getIdentifier().length(); i++) {
+//            // Update the Search Metric.
+//            lIsFound &= this.getCharacterAt(i).equals(FACTORY_CHIRP.getIdentifier().charAt(i));
+//        }
+//
+//        // Could we find the Identifier?
+//        if(lIsFound) {
+//            // Prepare the String.
+//            String lMessage = "";
+//            // Iterate the Data.
+//            for(int i = 0; i < MainActivity.FACTORY_CHIRP.getEncodedLength(); i++) { /** TODO: Fetch indices directly instead. */
+//                // Append the read characters.
+//                lMessage += this.getCharacterAt(i);
+//            }
+//            // Declare the ResultBuffer.
+//            final int[] lResult = new int[MainActivity.FACTORY_CHIRP.getRange().getFrameLength()];
+//            // Iterate the data-style characters.
+//            for(int i = 0; i < FACTORY_CHIRP.getIdentifier().length() + FACTORY_CHIRP.getPayloadLength(); i++) {
+//                // Update the Result with the corresponding index value.
+//                lResult[i] = FACTORY_CHIRP.getRange().getCharacters().indexOf(lMessage.charAt(i));
+//            }
+//            // Iterate the error correction characters.
+//            for(int i = 0; i < FACTORY_CHIRP.getErrorLength(); i++) {
+//                // Update the Result with the corresponding index value.
+//                lResult[(lResult.length - FACTORY_CHIRP.getErrorLength()) + i] = FACTORY_CHIRP.getRange().getCharacters().indexOf(lMessage.charAt( FACTORY_CHIRP.getIdentifier().length() + FACTORY_CHIRP.getPayloadLength() + i));
+//            }
+//
+//            try {
+//                // Attempt to decode the result.
+//                this.getReedSolomonDecoder().decode(lResult, MainActivity.FACTORY_CHIRP.getErrorLength());
+//                // Reset the Message.
+//                lMessage = "";
+//                // Iterate the Result.
+//                for(int i = 0; i < FACTORY_CHIRP.getIdentifier().length() + FACTORY_CHIRP.getPayloadLength(); i++) {
+//                    // Buffer the decoded character.
+//                    lMessage += FACTORY_CHIRP.getRange().getCharacters().charAt(lResult[i]);
+//                }
+//                // Log the detected chirp.
+//                Log.d(TAG, "Rx(" + lMessage + ")");
+//            }
+//            catch (final ReedSolomonException pReedSolomonException) {
+//                // Here, we ignore undetected chirps.
+//                // Print the Stack Trace.
+//                //pReedSolomonException.printStackTrace();
+//            }
+//        }
+//    }
 
-        // Could we find the Identifier?
-        if(lIsFound) {
-            // Prepare the String.
-            String lMessage = "";
-            // Iterate the Data.
-            for(int i = 0; i < MainActivity.FACTORY_CHIRP.getEncodedLength(); i++) { /** TODO: Fetch indices directly instead. */
-                // Append the read characters.
-                lMessage += this.getCharacterAt(i);
-            }
-            // Declare the ResultBuffer.
-            final int[] lResult = new int[MainActivity.FACTORY_CHIRP.getRange().getFrameLength()];
-            // Iterate the data-style characters.
-            for(int i = 0; i < FACTORY_CHIRP.getIdentifier().length() + FACTORY_CHIRP.getPayloadLength(); i++) {
-                // Update the Result with the corresponding index value.
-                lResult[i] = FACTORY_CHIRP.getRange().getCharacters().indexOf(lMessage.charAt(i));
-            }
-            // Iterate the error correction characters.
-            for(int i = 0; i < FACTORY_CHIRP.getErrorLength(); i++) {
-                // Update the Result with the corresponding index value.
-                lResult[(lResult.length - FACTORY_CHIRP.getErrorLength()) + i] = FACTORY_CHIRP.getRange().getCharacters().indexOf(lMessage.charAt( FACTORY_CHIRP.getIdentifier().length() + FACTORY_CHIRP.getPayloadLength() + i));
-            }
-
-            try {
-                // Attempt to decode the result.
-                this.getReedSolomonDecoder().decode(lResult, MainActivity.FACTORY_CHIRP.getErrorLength());
-                // Reset the Message.
-                lMessage = "";
-                // Iterate the Result.
-                for(int i = 0; i < FACTORY_CHIRP.getIdentifier().length() + FACTORY_CHIRP.getPayloadLength(); i++) {
-                    // Buffer the decoded character.
-                    lMessage += FACTORY_CHIRP.getRange().getCharacters().charAt(lResult[i]);
-                }
-                // Log the detected chirp.
-                Log.d(TAG, "Rx(" + lMessage + ")");
-            }
-            catch (final ReedSolomonException pReedSolomonException) {
-                // Here, we ignore undetected chirps.
-                // Print the Stack Trace.
-                //pReedSolomonException.printStackTrace();
-            }
-        }
-    }
-
-    /** Returns the character at a normalized index. (Compensates for the fact that the PitchBuffer is a multiple of samples per index.) */
-    private final Character getCharacterAt(final int pIndex) {
-        // Fetch the Frequencies.
-        final double    lFo = this.getPitchBuffer()[(pIndex * MainActivity.SIZE_READ_BUFFER_PER_ELEMENT) + 0];
-        final double    lFa = this.getPitchBuffer()[(pIndex * MainActivity.SIZE_READ_BUFFER_PER_ELEMENT) + 1];
-        // Fetch the Characters.
-        final Character lCo = this.getCharacterFor(lFo);
-        final Character lCa = this.getCharacterFor(lFa);
-        // Are they equal?
-        if(lCo == lCa) {
-            // Return the Character.
-            return lCo;
-        }
-        else {
-            // Return the character for the average frequency. (Use a geometric mean.)
-            return this.getCharacterFor(Math.sqrt(lFo * lFa));
-        }
-    }
+//    /** Returns the character at a normalized index. (Compensates for the fact that the PitchBuffer is a multiple of samples per index.) */
+//    private final Character getCharacterAt(final int pIndex) {
+//        // Fetch the Frequencies.
+//        final double    lFo = this.getPitchBuffer()[(pIndex * MainActivity.SIZE_READ_BUFFER_PER_ELEMENT) + 0];
+//        final double    lFa = this.getPitchBuffer()[(pIndex * MainActivity.SIZE_READ_BUFFER_PER_ELEMENT) + 1];
+//        // Fetch the Characters.
+//        final Character lCo = this.getCharacterFor(lFo);
+//        final Character lCa = this.getCharacterFor(lFa);
+//        // Are they equal?
+//        if(lCo == lCa) {
+//            // Return the Character.
+//            return lCo;
+//        }
+//        else {
+//            // Return the character for the average frequency. (Use a geometric mean.)
+//            return this.getCharacterFor(Math.sqrt(lFo * lFa));
+//        }
+//    }
 
     /** Returns the Character corresponding to a Frequency. */
     private final Character getCharacterFor(final double pPitch) {
@@ -432,7 +427,7 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
             final int lIo =   i * lNumberOfSamples;
             final int lIa = lIo + lNumberOfSamples;
             // Declare the RampWidth. We'll change it between iterations for more tuneful sound.)
-            final int lRw = (int)(lNumberOfSamples * (0.15 + (0.15 * Math.random())));
+            final int lRw = (int)(lNumberOfSamples * 0.05);
             // Iterate the Ramp.
             for(int j = 0; j < lRw; j++) {
                 // Calculate the progression of the Ramp.
@@ -534,8 +529,8 @@ public class MainActivity extends AppCompatActivity implements PitchDetectionHan
         return this.mSampleSelf;
     }
 
-    private final double[] getPitchBuffer() {
-        return this.mPitchBuffer;
-    }
+//    private final double[] getPitchBuffer() {
+//        return this.mPitchBuffer;
+//    }
 
 }
