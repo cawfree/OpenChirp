@@ -67,7 +67,7 @@ gen=rsgenpoly(n, k);
 # Encode using Reed-Solomon encoding.
 code=rsenc(msg, n, k, gen); 
 ```
-__Note:__ This is example was sourced from the excellent book [_Real-Time Digital Signal Processing: Implementations and Applications_](https://books.google.co.uk/books?id=QIj9Pthp_T8C&pg=PA569&lpg=PA569&dq=reed+solomon+2%5E5&source=bl&ots=kBzfAyfry_&sig=T7AcjbdMjSNXNl1o1ETlAMfDuyg&hl=en&sa=X&ved=0ahUKEwiJu6am4M3WAhXBbRQKHQoPDIg4ChDoAQgnMAA#v=onepage&q=reed%20solomon%202%5E5&f=false).
+__Note:__ This work is based on [_Real-Time Digital Signal Processing: Implementations and Applications_](https://books.google.co.uk/books?id=QIj9Pthp_T8C&pg=PA569&lpg=PA569&dq=reed+solomon+2%5E5&source=bl&ots=kBzfAyfry_&sig=T7AcjbdMjSNXNl1o1ETlAMfDuyg&hl=en&sa=X&ved=0ahUKEwiJu6am4M3WAhXBbRQKHQoPDIg4ChDoAQgnMAA#v=onepage&q=reed%20solomon%202%5E5&f=false).
 
 The resulting value stored into the `code` array is `[23 3 10 6 7 10 10 18 1 24 0 0 0 0 0 0 0 0 0 0 0 0 0 1 22 18 25 27 20 13 8]`. Compensating for zero padding, this can be interpreted as `[23 3 10 6 7 10 10 18 1 24 1 22 18 25 27 20 13 8]`. 
 
