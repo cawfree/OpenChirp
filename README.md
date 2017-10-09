@@ -2,16 +2,23 @@
 An open source implementation of the [Chirp](chirp.io) data-over-audio protocol.
 
 ## What's Chirp?
-Back in 2016, the awesome [developers behind Chirp](https://www.chirp.io/about) devised of a protocol for encoding and transmitting data over the audio range. Simply, a sender and receiver make an _a priori_ agreement of which frequencies correspond to which letters of a shared alphabet. The sender takes an arbitrary message and maps it to the frequency _alphabet_, and the listener transforms the frequencies it hears back into the original data.
+Back in 2016, the awesome [developers behind Chirp](https://www.chirp.io/about) devised of a protocol for encoding and transmitting data over the audial range. Put simply, a sender and receiver make an _a priori_ agreement of which frequencies correspond to which letters of a shared alphabet. The sender then takes an arbitrary message and maps it to the corresponding frequency range, whilst the listener transforms the frequencies it hears back into the original data.
 
 ## Dependencies
 The Chirp protocol uses the [_Galois Transform_](https://en.wikipedia.org/wiki/Galois_theory) to encode and append redundant symbols to the payload in order to counteract the effects of the lossy surrounding environment. This is a complicated process, though luckily it is also a widely used one. This repository makes use of [`zxing-core`](https://github.com/zxing/zxing), which applies the `GenericGF` `class` that is used to encode and decode QR codes.
 
-## Interested in contributing?
-Currently, there is only the 
-
 ## Background
-In 
+There's little lying around about the fundamentals in how Chirp protocol style data is put together; most notably because the official protocol obscures the lower-level information on how signal data is encoded. Take the [chirp-arduino example](https://github.com/chirp/chirp-arduino):
+
+```
+void loop() {
+   chirp.chirp("parrotbilllllahcm4");
+   delay(2000);
+}
+```
+
+## Interested in contributing?
+This is an active project. Currently, we've only provided an example implementation in [Android](https://github.com/Cawfree/OpenChirp/tree/master/android), but due to the diverse nature of sound, there are very many platforms that could be configured as a transmitter or receiver for the protocol. Please drop me a line at `cawfree@gmail.com` if you're interested.
 
 ###
 
