@@ -4,9 +4,9 @@ An open source implementation of the [Chirp](chirp.io) data-over-audio protocol.
 ## What's Chirp?
 Back in 2016, the [developers behind Chirp](https://www.chirp.io/about) devised of a protocol for encoding and transmitting data using the audial range, as this would be a common interface between a great many different devices. 
 
-Put simply, a sender and receiver make an _a priori_ agreement of which frequencies correspond to which letters of a shared alphabet. The sender then takes an arbitrary message and maps it to the corresponding frequency range and appends a couple of error handling symbols, whilst the listener transforms the frequencies it hears back into the original data. 
+Put simply, a sender and receiver make an _a priori_ agreement of which frequencies correspond to which letters of a shared alphabet. The sender then takes an arbitrary message, maps it to the corresponding frequency range alongside a couple of error handling symbols, whilst the listener transforms the frequencies it hears back into the original data. Provided the channel isn't too lossy, data can be reliably reconstructed back on the listener's side. 
 
-The coolest thing? When you're not sending the symbols in the `40kHz` (ultrasonic, inaudable) range, they sound like a cute little bird singing its head off.
+The coolest thing? When you're not sending the symbols in the `40kHz` (ultrasonic, inaudable) range, they sound like a cute little bird singing its goddamn head off.
 
 ## What's in these examples?
 Each example contains a transmitter and receiver example. Additionally, they are capable of listening to _themselves_, so there's no need for multiple devices for when you're testing stuff out.
