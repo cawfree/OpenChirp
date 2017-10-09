@@ -6,7 +6,7 @@ An open source implementation of the [Chirp](chirp.io) data-over-audio protocol.
 </p>
 
 ## What's Chirp?
-Back in 2016, the [developers behind Chirp](https://www.chirp.io/about) devised of a protocol for encoding and transmitting data using the audial range, as this would be a common interface between a great many different devices. 
+Back in 2016, the [developers behind Chirp](https://www.chirp.io/about) devised of a protocol for encoding and transmitting data using the audio range, as this could be used as a common interface between a great many different devices. 
 
 Put simply, a sender and receiver make an _a priori_ agreement of which frequencies correspond to which letters of a shared alphabet. The sender then takes an arbitrary message, maps it to the corresponding frequency range alongside a couple of error handling symbols, whilst the listener transforms the frequencies it hears back into the original data. Provided the channel isn't too lossy, data can be reliably reconstructed back on the listener's side. 
 
