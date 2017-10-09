@@ -12,7 +12,7 @@ The coolest thing? When you're not sending the symbols in the `40kHz` (ultrasoni
 Each example contains a transmitter and receiver example. Additionally, the example projects are capable of listening to _themselves_, so there's no need for swapping between multiple devices whilst you're just testing stuff out.
 
 ## Dependencies
-The Chirp protocol uses the [Galois Transform](https://en.wikipedia.org/wiki/Galois_theory) to encode and append redundant symbols to the payload in order to counteract the effects of the lossy surrounding environment. This is a complicated process, although luckily it's also a widely used one. This repository makes use of [`zxing-core`](https://github.com/zxing/zxing), which applies the `GenericGF` `class` that is used to encode and decode QR codes.
+The Chirp protocol uses the [Galois Transform](https://en.wikipedia.org/wiki/Galois_theory) and [Reed-Solomon Encoding](https://en.wikipedia.org/wiki/Reed%E2%80%93Solomon_error_correction) to encode and append redundant symbols to the payload in order to counteract the effects of the lossy surrounding environment using error correction. This is a complicated process, although luckily it's also a widely used one. This repository makes use of [`zxing-core`](https://github.com/zxing/zxing), which applies the `GenericGF` `class` that is used to encode and decode QR codes.
 
 tardosDSP
 
@@ -36,21 +36,40 @@ The [Chirp Developer Guide](developers.chirp.io/docs/chirps-shortcodes) uses the
 Below, we break down the encoding process using [_Octave_](https://www.gnu.org/software/octave/) and the [_Communications_](https://octave.sourceforge.io/communications/) extension:
 
 ```
-pkg load communications # Load the communications package.
-msg1 = [23 3 10 6 7 10 10 18 1 24 0 0 0 0 0 0 0 0 0 0 0 0 0]; # Declare the payload within the frame. (All other symbols are 0)
-                                                              # Note, we use a length(msg1) == 31 array.
-                                                              # The first 10 characters are the message we wish to send, where
-                                                              # each number represents the position of our transmission string
-                                                              # within the alphabet. "0123456789abcdefghijklmnopqrstuv"
-m = 5; # The number of bits used to repsent data. 
-       # This is what imposes the alpabet size limit (0 ... v).
-n = 2^m-1; # Defines the packet size (2^m - 1) == 31.
-k = 23; # Declares the offset of the error bits. (Pad with zeroes to fill the space in the frame between the payload and error bits.)
-msg=gf([msg1], m); # Generate the galois field.
-gen=rsgenpoly(n, k); # Generate the galois polynomial.
-code=rsenc(msg, n, k, gen); # Encode using Reed-Solomon encoding.
+# Load the communications package.
+pkg load communications 
+
+# Declare the payload within the frame. (All other symbols are 0)
+# Note, we use a length(msg1) == 31 array.
+# The first 10 characters are the message we wish to send, where
+# each number represents the position of our transmission string
+# within the alphabet. "0123456789abcdefghijklmnopqrstuv"
+msg1 = [23 3 10 6 7 10 10 18 1 24 0 0 0 0 0 0 0 0 0 0 0 0 0]; 
+
+# Declare number of bits used to repsent data. 
+# This is what imposes the alpabet size limit (0 ... v).       
+m = 5; 
+
+# Define the packet size (2^m - 1) == 31.
+n = 2^m-1; 
+
+# Declares the offset of the error bits. 
+# Here we pad with zeroes to fill the space in the frame between the payload and error bits,
+# since the frame length must be 31 in order for the Reed Solomon decoding process to work.
+k = 23; 
+
+# Generate the galois field.
+msg=gf([msg1], m); 
+
+# Generate the galois polynomial. (This is a primitive polynomial of D^5+D^2+1 (decimal 37) or 0b00100101).
+gen=rsgenpoly(n, k); 
+
+# Encode using Reed-Solomon encoding.
+code=rsenc(msg, n, k, gen); 
 ```
 __Note:__ This is example was sourced from the excellent book [_Real-Time Digital Signal Processing: Implementations and Applications_](https://books.google.co.uk/books?id=QIj9Pthp_T8C&pg=PA569&lpg=PA569&dq=reed+solomon+2%5E5&source=bl&ots=kBzfAyfry_&sig=T7AcjbdMjSNXNl1o1ETlAMfDuyg&hl=en&sa=X&ved=0ahUKEwiJu6am4M3WAhXBbRQKHQoPDIg4ChDoAQgnMAA#v=onepage&q=reed%20solomon%202%5E5&f=false).
+
+The resulting value stored into the `code` array is `[23 3 10 6 7 10 10 18 1 24 0 0 0 0 0 0 0 0 0 0 0 0 0 1 22 18 25 27 20 13 8]`. Compensating for zero padding, this can be interpreted as `[23 3 10 6 7 10 10 18 1 24 1 22 18 25 27 20 13 8]`. By cross-referencing these values against the alphabet, you'll see that this array is equivalent to `n3a67aai1o1miprkd8`.
 
 
 alphabet x, gives polynomial simplest as 
