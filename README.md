@@ -1,5 +1,5 @@
 # OpenChirp
-An open source implementation of the [Chirp](chirp.io) data-over-audio protocol.
+An open source implementation of the [Chirp](https://www.chirp.io) data-over-audio protocol.
 
 <p align="center">
   <img src ="https://i.imgur.com/rP7JR3H.png" />
