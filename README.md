@@ -76,6 +76,7 @@ By cross-referencing these values against the alphabet, you'll see that the resu
 If you're interested in finding more information on this process, here are some invaluable resources:
   - [BBC Worked Example](https://downloads.bbc.co.uk/rd/pubs/whp/whp-pdf-files/WHP031.pdf)
   - [Carnegie Mellon School of Computer Science](https://www.cs.cmu.edu/~guyb/realworld/reedsolomon/reed_solomon_codes.html)
+  - [Implementing the Chirp Protocol Using WebAudio](http://ricardo.cc/2012/12/30/Implementing-the-chirp-protocol-using-webaudio.html)
 
 ## Interested in contributing?
 This is an active project. Currently, we've only provided an example implementation in [Android](https://github.com/Cawfree/OpenChirp/tree/master/android), but due to the diverse nature of sound, there are very many platforms that could be configured as a transmitter or receiver for the protocol. 
@@ -84,4 +85,4 @@ Feel free to drop me a line at [`@cawfree`](https://twitter.com/cawfree).
 
 ## Dependencies
   - [`zxing-core`](https://github.com/zxing/zxing)
-  - [TarsosDSP](https://github.com/JorenSix/TarsosDSP)
+  - [`tarsosdsp`](https://github.com/JorenSix/TarsosDSP)
