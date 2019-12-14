@@ -88,5 +88,7 @@ Feel free to drop me a line at [`@cawfree`](https://twitter.com/cawfree).
   - [`tarsosdsp`](https://github.com/JorenSix/TarsosDSP)
 
 <p align="center">
-[![Buy @cawfree a coffee](https://cdn.buymeacoffee.com/buttons/default-orange.png)](https://www.buymeacoffee.com/cawfree)
+  <a href="https://www.buymeacoffee.com/cawfree">
+    <img src="https://cdn.buymeacoffee.com/buttons/default-orange.png" alt="Buy @cawfree a coffee" />
+  </a>
 </p>
