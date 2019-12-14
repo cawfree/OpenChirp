@@ -87,7 +87,7 @@ Feel free to drop me a line at [`@cawfree`](https://twitter.com/cawfree).
   - [`zxing-core`](https://github.com/zxing/zxing)
   - [`tarsosdsp`](https://github.com/JorenSix/TarsosDSP)
   
-## Donations
+## Coffee
 
 Open source takes a lot of work! If this project has helped you, please consider [buying me a coffee](https://www.buymeacoffee.com/cawfree).
 
